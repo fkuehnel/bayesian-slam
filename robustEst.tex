@@ -806,6 +806,7 @@ distributions in exponential coordinates have significant gaussian characteristi
 Further, on the application side we have introduced a novel 2 step estimation technique, the marginalized MAP estimator, which is numerically more stable and computationally much more efficient than bundle-adjustment, the traditional technique for camera pose estimation from images. Future work will focus on a recursive estimation scheme as well as proper outlier-detection based on MAPSAC.
 
 \begin{appendix}
+
 \section{SE(3) Matrix group}
 \label{app:SE3group}
 A group element $g\in SE(3)$ can be represented by a real valued $4\times 4$ matrix
@@ -817,6 +818,10 @@ A group element $g\in SE(3)$ can be represented by a real valued $4\times 4$ mat
     \end{array} \right) \label{eq:SE3matrixrepresentation}
 \eeq
 and group operation is endowed as usual by matrix multiplication.
+Throughout this appendix, $[{\bf v}]_\times$ denotes the skew-symmetric matrix associated
+with a vector ${\bf v}\in\real^3$, defined by $[{\bf v}]_\times\,{\bf w} = {\bf v}\times{\bf w}$
+for all ${\bf w}\in\real^3$.
+
 \subsection{Exponential and logarithmic map}
 \label{app:expmap}
 Any matrix of the structure (\ref{eq:SE3matrixrepresentation}) can be obtained
@@ -842,7 +847,7 @@ where each element of $\hat{\bf H}$ and $\hat{\bf T}$ are real $4\times 4$ matri
 also called the generators of the $SE(3)$ group. In conjunction with the Lie-product
 ({\em commutator}), $[{\sf A},{\sf B}]_c = {\sf AB}-{\sf BA}$ \footnote{the square bracket
 notation is frequently used without the subscript $c$, we use it here because we already
-defined $[{\bfomega},{\bf v}]$ as the concatation of 2 vectors.},
+defined $[{\bfomega},{\bf v}]$ as the concatenation of 2 vectors.},
 the vector space becomes the $se(3)$ Lie algebra,
 \beq
     [{\sf H}_i,{\sf H}_j]_c = \varepsilon_{ijk}{\sf H}_k,\;
@@ -866,7 +871,7 @@ Frequently, we will have to deal with a factorized representation of (\ref{eq:ex
 \end{multline}
 where $({\bf T},\phi,\vartheta,\psi)_{L_2}$ are called {\em canonical coordinates of second kind}
 \footnote{the ordering of the exponential factors is important, hence there are multiple sets
-of coordinates, i~.e.~ Euler ZYZ, XYZ$\ldots$}.
+of coordinates, i.e.\ Euler ZYZ, XYZ$\ldots$}.
 Due to the non-trivial algebra structure (\ref{eq:commutatortable}) the connection between first
 and second kind coordinates is not a simple one.
 However, we can give a simple commutation rule for the following case
@@ -880,7 +885,7 @@ which can be derived from the general conjugation rule
     g^{-1}\,\exp(\hat{\bf H}\cdot\bfOmega+\hat{\bf T}\cdot{\bf T})\, g =
     \exp(g^{-1}\; (\hat{\bf H}\cdot\bfOmega+\hat{\bf T}\cdot{\bf T})\; g) \label{eq:conjugation}
 \eeq
-where $g$ in the exponent of (\ref{eq:conjugation}) is interpreted as a 4x4 matrix, according to
+where $g$ in the exponent of (\ref{eq:conjugation}) is interpreted as a $4\times 4$ matrix, according to
 (\ref{eq:SE3matrixrepresentation}).
 
 In particular, for the exponential map (\ref{eq:exponentialmap}) we can give the following
@@ -896,10 +901,14 @@ where we use the notation
     \Theta=|\bfOmega|,\; {\bf r} = \bfOmega/\Theta,\quad
     {\sf H}=\hat{\bf H}\cdot{\bf r}. \label{eq:expnotation}
 \eeq
-As seen from the Rodrigues formula (\ref{eq:rodrigues}), ${\sf R}(\bfomega)$ is $2\pi$-periodic in $\Theta$.
-This implies that a change in the normal vector direction can be compensated by a $2\pi$ offset, $({\bf r},\Theta) \cong (-{\bf r},2\pi-\Theta)$. Hence, $\bfomega$ uniquely specifies a rotation only when it is restricted within a sphere of radius $\pi$. Penetrating the skin of this sphere causes {\em phase reflection} and constitutes some difficulty in the inversion process, see below. This fact is also well known as double connectedness,
-$SO(3) \cong S^3/Z_2$, where opposite points on the skin of the sphere are identical with each other,
+As seen from the Rodrigues formula (\ref{eq:rodrigues}), ${\sf R}(\bfOmega)$ is $2\pi$-periodic in $\Theta$.
+This implies that a change in the normal vector direction can be compensated by a $2\pi$ offset,
+$({\bf r},\Theta) \cong (-{\bf r},2\pi-\Theta)$. Hence, $\bfOmega$ uniquely specifies a rotation
+only when it is restricted within a sphere of radius $\pi$. Penetrating the skin of this sphere
+causes {\em phase reflection}, where opposite points on the boundary are identified,
 $({\bf r},\pi) \equiv (-{\bf r},\pi)$.
+This phenomenon has a precise topological origin in the double-cover structure
+$SU(2)/\mathbb{Z}_2 \cong SO(3)$, which we develop in the next subsection.
 
 The inverse function to the exponential map is the logarithmic map
 \beq
@@ -907,10 +916,128 @@ The inverse function to the exponential map is the logarithmic map
     \label{eq:logarithmicmap}
 \eeq
 which is well defined for $\Theta<\pi$. As discussed above, the logarithmic map will not be
-unique at the phase reflection boundary, $\Theta = \pi$. The existance of such boundary will have
+unique at the phase reflection boundary, $\Theta = \pi$. The existence of such boundary will have
 implications for the topics considered in the following sections.
 
-\subsection{Baker-Campbell-Hausdorff formula, {\em adding} two finite rotations}
+%% -----------------------------------------------------------------------
+\subsection{The $SU(2)/\mathbb{Z}_2 \cong SO(3)$ connection}
+\label{app:su2so3}
+%% -----------------------------------------------------------------------
+The $SO(3)$ generating algebra ${\sf H}_i$ and the $SU(2)$ one with generators ${\sf u}_i$
+have very similar structures,
+meaning there is an isomorphism between the algebras, $\mathfrak{so}(3) \cong \mathfrak{su}(2)$,
+\beq
+      [{\sf H}_i,{\sf H}_j]_c = \varepsilon_{ijk}{\sf H}_k,\;
+      [{\sf u}_i,{\sf u}_j]_c = 2\varepsilon_{ijk}{\sf u}_k\;. \label{eq:su2-algebra-structure}
+\eeq
+Hence, after the rescaling $\tau_i = \tfrac{1}{2}{\sf u}_i$, we obtain
+$[\tau_i,\tau_j]_c = \varepsilon_{ijk}\tau_k$, so that the correspondence
+${\sf H}_i \leftrightarrow \tau_i$ defines the Lie-algebra isomorphism
+$\mathfrak{so}(3) \cong \mathfrak{su}(2)$.
+
+Both ${\sf H}_0$ and ${\sf u}_0$ are the identity matrices in each of their cases;
+they are the identity elements of the group representations, not generators
+of the Lie algebra.
+The standard matrix representations are:
+\beq
+   {\sf u}_1 = \begin{pmatrix} 0 & i \\ i & 0 \end{pmatrix}, \; {\sf u}_2 = \begin{pmatrix} 0 & -1 \\ 1 & 0 \end{pmatrix}, \; {\sf u}_3 = \begin{pmatrix} i & 0 \\ 0 & -i \end{pmatrix}
+\eeq
+and for the Lie algebra $\mathfrak{so}(3)$ generators of the $SO(3)$ group
+\begin{IEEEeqnarray*}{c}
+   {\sf H}_1 = \begin{pmatrix} 0 & 0 & 0 \\ 0 & 0 & -1 \\ 0 & 1 & 0 \end{pmatrix},\quad
+   {\sf H}_2 = \begin{pmatrix} 0 & 0 & 1 \\ 0 & 0 & 0 \\ -1 & 0 & 0 \end{pmatrix},\\
+   {\sf H}_3 = \begin{pmatrix} 0 & -1 & 0 \\ 1 & 0 & 0 \\ 0 & 0 & 0 \end{pmatrix}\, .
+\end{IEEEeqnarray*}
+Other representations of $\mathfrak{su}(2)$ are possible and standard in Physics, with the
+algebra structure (\ref{eq:su2-algebra-structure}) changing slightly to
+$[{\sigma}_i,{\sigma}_j]_c = 2i\varepsilon_{ijk}{\sigma}_k$,
+which introduces the Pauli matrices:
+\beq
+     \sigma_1 = -i {\sf u}_1\,,\quad \sigma_2 = i {\sf u}_2\,,\quad \sigma_3 = -i {\sf u}_3\, .
+\eeq
+
+Regardless of the isomorphic $\mathfrak{su}(2)$ representations, the generated group
+$SU(2)$ is not isomorphic to $SO(3)$: $SU(2)$ is the simply connected double cover
+of $SO(3)$. To see this explicitly through the Rodrigues formulas, let
+\beq
+   {\sf u} = \hat{\sf u}\cdot{\bf r} = r_i\,{\sf u}_i\,,\qquad
+   \Theta = |\bfOmega|\,,\qquad
+   {\bf r} = \bfOmega/\Theta\,.
+\eeq
+Since ${\sf u}^2 = -{\sf u}_0$ for any unit vector ${\bf r}$, the matrix exponential
+in $SU(2)$ truncates to
+\beq
+   U(\bfOmega) = \exp\!\Bigl(\tfrac{1}{2}\,\hat{\sf u}\cdot\bfOmega\Bigr)
+   = {\sf u}_0\cos\frac{\Theta}{2}
+     + {\sf u}\,\sin\frac{\Theta}{2}\,. \label{eq:rodrigues-su2}
+\eeq
+The adjoint action of $U$ on the pure-imaginary quaternion subspace induces
+a rotation ${\sf R}(\bfOmega)\in SO(3)$:
+\begin{IEEEeqnarray}{rCl}
+   U(\bfOmega)\;(\hat{\sf u}\cdot{\bf x})\;U(\bfOmega)^{-1}
+   &=& \hat{\sf u}\cdot\bigl({\sf R}(\bfOmega)\,{\bf x}\bigr)\,, \nonumber\\
+   {\sf R}(\bfOmega)\,{\bf x}
+   &=& \cos\Theta\;{\bf x}
+       + (1-\cos\Theta)({\bf r}\cdot{\bf x})\,{\bf r}
+       + \sin\Theta\; {\bf r}\times{\bf x}\,. \label{eq:rodrigues-vector}
+\end{IEEEeqnarray}
+In matrix form this is precisely the Rodrigues formula (\ref{eq:rodrigues}).
+
+Equivalently, writing $U$ in quaternion parametrisation,
+\beq
+   U = q_0\,{\sf u}_0 + q_i\,{\sf u}_i\,,\qquad
+   q_0 = \cos\frac{\Theta}{2}\,,\qquad
+   {\bf q} = \sin\frac{\Theta}{2}\;{\bf r}\,,\qquad
+   q_0^2 + {\bf q}^{\!\top}{\bf q} = 1\,,
+\eeq
+the induced rotation matrix becomes
+\beq
+   {\sf R}(U) = (q_0^2 - {\bf q}^{\!\top}{\bf q})\,{\sf H}_0
+          + 2\,{\bf q}\,{\bf q}^{\!\top}
+          + 2\,q_0\,[{\bf q}]_\times\,. \label{eq:quaternion-to-R}
+\eeq
+This exhibits $SU(2)\cong S^3$ directly.
+
+\paragraph{The covering map.}
+The surjective homomorphism $\pi\colon SU(2)\to SO(3)$ is therefore given by
+\beq
+   \pi(U) = {\sf R}(U)\,,\qquad
+   \ker\pi = \{\pm {\sf u}_0\}\,.
+\eeq
+Hence
+\beq
+   SO(3) \cong SU(2)/\{\pm {\sf u}_0\} \cong S^3/\mathbb{Z}_2\,.
+\eeq
+
+\paragraph{The two-to-one identification.}
+In the exponential parametrisation the double cover appears as
+\beq
+   U(\bfOmega + 2\pi{\bf r}) = -\,U(\bfOmega)\,,\qquad
+   \pi(U) = \pi(-U)\,.
+\eeq
+Antipodal points in $SU(2)\cong S^3$ therefore represent the same rotation
+in $SO(3)$. This is the precise topological origin of the
+phase-reflection phenomenon encountered in the previous subsection:
+the identification $({\bf r},\pi) \equiv (-{\bf r},\pi)$ on the boundary
+of the Rodrigues parameter sphere is the quotient $S^3/\mathbb{Z}_2$
+restricted to the equator. Equivalently,
+$\pi_1(SO(3)) = \mathbb{Z}_2$, whereas $SU(2)\cong S^3$ is simply connected.
+
+\paragraph{Inverse map.}
+Given ${\sf R}\in SO(3)$, the rotation angle follows from $\mathrm{Tr}\,{\sf R} = 1 + 2\cos\Theta$
+and the axis from the antisymmetric part,
+$n_k = -\varepsilon_{ijk}\,R_{ij}/(2\sin\Theta)$, after which (\ref{eq:rodrigues-su2})
+returns the $SU(2)$ element up to an overall sign.
+Alternatively, reading off from (\ref{eq:quaternion-to-R}) directly:
+$q_0 = \pm\tfrac{1}{2}\sqrt{1+\mathrm{Tr}\,{\sf R}}$ and
+$q_k = -\varepsilon_{ijk}\,R_{ij}/(4q_0)$ for $q_0\neq 0$.
+The sign ambiguity is precisely the $\mathbb{Z}_2$ kernel: no continuous global
+section $SO(3)\to SU(2)$ exists.
+
+%% -----------------------------------------------------------------------
+\subsection{Baker-Campbell-Hausdorff formula: composing two finite rotations}
+\label{app:BCH}
+%% -----------------------------------------------------------------------
 Frequently, we obtain a factorized rotation representation,
 \beq
     \exp( \Theta_c {\sf H}_c ) = \exp(\Theta_a {\sf H}_a)\exp(\Theta_b{\sf H}_b),
@@ -928,8 +1055,9 @@ the derivative of exponentials, the resulting integral with function $h(x)=\ln(x
     [{\sf H}_a,{\sf H}_b]+
     \ldots\; . \label{eq:BCH}
 \eeqar
-However, (\ref{eq:BCH}) only hands an infinite series expansion. It is quite useful to have a closed expression for the Rodrigues vector $\bfOmega_c$ of the resulting rotation ${\sf R}_c = \exp( \hat{\bf H}\cdot\bfOmega_c )$. We could compactly denote this operation as $\bfOmega_c = \ln {\sf R}_a{\sf R}_b\,$. One can show, i.~e. by using a quaternion representation
-\cite{myself}, that the following Eqn.~holds,
+However, (\ref{eq:BCH}) only hands an infinite series expansion. It is quite useful to have a closed expression for the Rodrigues vector $\bfOmega_c$ of the resulting rotation ${\sf R}_c = \exp( \hat{\bf H}\cdot\bfOmega_c )$. We could compactly denote this operation as $\bfOmega_c = \ln {\sf R}_a{\sf R}_b\,$. Using the quaternion
+representation of $SU(2)$ developed in \S\ref{app:su2so3}, one can show that
+the following Eqn.~holds,
 \begin{multline}
     \bfOmega_c = {\Theta_c\over C}\left(
     a \, {\bf r}_a + b \, {\bf r}_b + ab \, {\bf r}_a\times{\bf r}_b \right), \\
@@ -941,7 +1069,7 @@ The normalizing factor, $C = \sqrt{A - \varepsilon^2}$, can be given as
     A = 1+a^2+b^2+a^2b^2,\;\; \varepsilon = (1-ab\cos\vartheta),\quad
     \cos\vartheta = {\bf r}_a\cdot{\bf r}_b\;, \label{eq:normfactor}
 \eeq
-and the norm $\Theta_c$ 
+and the norm $\Theta_c$
 \beq
     \tan{\Theta_c\over 2} = C / \, \varepsilon\;.
 \eeq
@@ -962,19 +1090,22 @@ below, we have to pay attention to the following two limit cases:
     {\cal O}((C/\varepsilon)^4) \; ]\; .
 \eeq
 \end{enumerate}
-\subsubsection{phase reflection $\Theta=\pi$}
-Since the logarithmic map loses its uniqueness at $\Theta=\pi$, we have to be careful to define the
+
+\subsubsection{Phase reflection at $\Theta=\pi$}
+Since the logarithmic map loses its uniqueness at $\Theta=\pi$
+(cf.\ the double-cover discussion in \S\ref{app:su2so3}),
+we have to be careful to define the
 vector addition (\ref{eq:addSO3finite}). Firstly, we consider
 $\Theta_a \rightarrow \pi-$ which implies $a\rightarrow \infty$ and $b$ finite.
 Secondly a similar statement accounts for the limit $a\rightarrow\infty$ and $b\rightarrow\infty$.
-We notice that those two limits, (i) and (ii), can be treated consistently
+We notice that those two limits, (i) and (ii), can be treated consistently.
 In both cases a cutline at $\cos\vartheta=0$ has to be made to account for the phase
 reflection boundary. The limit process $\Theta_a \rightarrow \pi-$ can be depicted graphically,
 see Fig.~\ref{fig:pwrap}.
 \begin{figure}
     \centering
     \includegraphics[width=6cm]{\getname{phasewrap}}
-    \caption{phase reflection occurs for $|\bfOmega_a| = \pi$. The result of {\em adding} another
+    \caption{Phase reflection occurs for $|\bfOmega_a| = \pi$. The result of {\em adding} another
     infinitesimal vector ${\bfomega}_b$ depends whether
     it has the same direction $\cos\vartheta>0$, which will give a resulting
     vector in the direction $-\bfOmega_a$. If $\cos\vartheta<0$, the resulting vector will be
@@ -982,9 +1113,9 @@ see Fig.~\ref{fig:pwrap}.
     \label{fig:pwrap}
 \end{figure}
 Hence, all quantities are properly defined in the limits. Therefore, Eqn.~(\ref{eq:addSO3finite}) can
-be used to {\em add} finite Rodrigues vectors without employing intermittant rotation matrices or quaternions!
+be used to {\em add} finite Rodrigues vectors without employing intermediate rotation matrices or quaternions!
 
-\subsubsection{adding two infinitesimal rotations, kinematics of rigid bodies}
+\subsubsection{Adding two infinitesimal rotations: kinematics of rigid bodies}
 The rate of change, {\em angular velocity}, of $\bfOmega$ for an infinitesimal small quantity $dt\rightarrow 0$
 is $d\bfOmega = dt\, \bfomega$. We can apply the finite {\em addition} formula (\ref{eq:addSO3finite}) or
 directly apply the BCH expansion (\ref{eq:BCH}) to obtain,
@@ -993,11 +1124,19 @@ directly apply the BCH expansion (\ref{eq:BCH}) to obtain,
     \label{eq:addSO3inf}
 \eeq
 As such we recover in (\ref{eq:addSO3inf}) the well known fact that angular velocities $\bfomega$
-constitutes an algebraic vectors space with the normal commutative addition. More exactly, the
+constitute an algebraic vector space with the normal commutative addition. More exactly, the
 vector space is known as $T_1SO(3)$.
 
-\subsection{Wei-Norman formula, derivative of exponentials, {\em adding} finite to infinitesimal rotation}
+%% -----------------------------------------------------------------------
+\subsection{Wei-Norman formula: composing a finite with an infinitesimal rotation}
 \label{app:weinorman}
+%% -----------------------------------------------------------------------
+We now derive the right Jacobian ${\sf J}_{\omega_r}$ that relates infinitesimal
+perturbations in Lie-algebra coordinates to the corresponding group-level variations.
+We present two routes: first via the Wei-Norman formula using the derivative of
+exponentials, then a direct computation from the finite addition formula
+(\ref{eq:addSO3finite}).
+
 Again, we consider the rotation product expression in (\ref{eq:expproduct}). This time we
 like to describe the infinitesimal environment at $\bfOmega_c = \bfOmega_a + \Delta\bfomega$
 for a finite left rotation $\bfOmega_a$ in dependence of an infinitesimal right rotation $\bfOmega_b \rightarrow \bf 0$.
@@ -1010,9 +1149,9 @@ Then we have to analyze the following directional derivative
 \eeq
 where the right composition Jacobian ${\sf J}_{\omega_r}(\bfOmega_a) \in \real^{3\times3}: 
 T_{{\sf R}(\bfOmega_a)}SO(3)\rightarrow T_1SO(3)$ describes the
-mapping from the tangent space at at ${\sf R}(\bfOmega_a)$ to the one at identity.
-In order to evaluate the left hand side of (\ref{eq:directionalderiv}), it is advantagous to
-consider a "matrix" equation for $g\in SE(3)$ and general ${\sf A},{\sf B}\in se(3)$
+mapping from the tangent space at ${\sf R}(\bfOmega_a)$ to the one at identity.
+In order to evaluate the left hand side of (\ref{eq:directionalderiv}), it is advantageous to
+consider a ``matrix'' equation for $g\in SE(3)$ and general ${\sf A},{\sf B}\in se(3)$
 \beq
     {\partial \over \partial t}g(t,s) = ({\sf A} + s{\sf B})g(s,t)\; \rightarrow \;
     g(s,t) = e^{t ({\sf A}+s{\sf B})}. \label{eq:SE3diff}
@@ -1035,7 +1174,10 @@ then applying it to (\ref{eq:directionalderiv}) yields
 a relationship to obtain ${\sf J}_{\omega_r}(\bfOmega_a)$. In fact (\ref{eq:weinorman}) constitutes a
 Wei-Norman formula \cite{Wei-Norman}, which relates the differential changes of a product of
 exponentials (\ref{eq:expproduct}) to the changes of one resulting exponential. However, it is not easy
-to obtain a closed form expression from (\ref{eq:weinorman}). It shall be noticed that with Eq.~(\ref{eq:addSO3finite})
+to obtain a closed form expression from (\ref{eq:weinorman}).
+
+\paragraph{Direct route via finite addition.}
+It shall be noticed that with Eqn.~(\ref{eq:addSO3finite})
 we directly obtain the right Rodrigues Jacobian ${\sf J}_{\omega_r}(\bfOmega_a)$ by,
 \beq
     {\sf J}_{\omega_r}(\bfOmega_a) = 
@@ -1044,7 +1186,7 @@ we directly obtain the right Rodrigues Jacobian ${\sf J}_{\omega_r}(\bfOmega_a)$
     \left.{\partial \bfOmega_c \over \partial {\bf r}_b} {\partial {\bf r}_b \over \partial \bfOmega_b}
     \right|_{\Theta_b=0}. \label{eq:jacobianomega1}
 \eeq
-Further, Eq.~(\ref{eq:jacobianomega1}) can be evaluated as,
+Further, Eqn.~(\ref{eq:jacobianomega1}) can be evaluated as,
 \beq
     {\sf J}_{\omega_r}(\bfOmega_a) = (1-x)\, {\sf I}+ x\, {\bf r}_a{\bf r}_a^T + {1\over 2}[\bfOmega_a]_\times,
     \; 1-x = {\Theta_a\over 2}\tan^{-1}{\Theta_a\over 2}.
@@ -1057,31 +1199,38 @@ complementary left Rodrigues Jacobian
     {\sf J}_{\omega_l} (\bfOmega_b) = (1-y)\, {\sf I}+ y\, {\bf r}_b{\bf r}_b^T - {1\over 2}[\bfOmega_b]_\times,
     \; 1-y = {\Theta_b\over 2}\tan^{-1}{\Theta_b\over 2}.
 \eeq
-It shall be emphazised that the Jacobiens above don't have singularities and are invertible, since all quantities
+It shall be emphasised that the Jacobians above don't have singularities and are invertible, since all quantities
 are well defined for $\Theta\leq\pi$ and $\mathrm{det}( {\sf J}_{\omega_r}) = (1-x)^2 + \Theta_a^2/4$.
 
-\subsection{Vector {\em addition} formulas over $SE(3)$}
-In close analogy to the previous section, a composition in $SE(3)$ can be analyzed
+%% -----------------------------------------------------------------------
+\subsection{Composition Jacobians over $SE(3)$}
+\label{app:SE3composition}
+%% -----------------------------------------------------------------------
+In close analogy to the previous sections, a composition in $SE(3)$ can be analyzed
 in the {\em additive} framework,
 \beq
     ({\sf R}(\bfOmega_c),{\bf T}_c)=({\sf R}_a,{\bf T}_a)\cdot
     ({\sf R}_b,{\bf T}_b)\, .
 \eeq
-\subsubsection{{\em adding} finite motions:}
+
+\subsubsection{Composing finite motions}
 With definition of this group composition (\ref{eq:groupcomposition}), we can formally write
 \beq
     \ln \, ({\sf R}(\bfOmega_c),{\bf T}_c) = [\ln {\sf R}_a{\sf R}_b,\;
     {\sf S}^{-1}(\bfOmega_c) ({\sf R}_a{\bf T}_b + {\bf T}_a) \, ].
     \label{eq:addfiniteSE3}
 \eeq
-\subsubsection{{\em adding} finite to infinitesimal motion}
+
+\subsubsection{Composing a finite with an infinitesimal motion}
 The addition formula (\ref{eq:addfiniteSE3}) can be analyzed in the limit $t\rightarrow 0$ where the right composition is $\ln ({\sf R}_b,{\bf T}_b) = [t \bfomega_b, t {\bf v}_b]$. It is easy to show that the following must hold to order ${\cal O}(t)$,
 \begin{multline}
     [\bfOmega_c,{\bf t}_c] = [\bfOmega_a,{\bf t}_a] + \\
     [{\sf J}_{\omega_r}(\bfOmega_a)\bfomega_b,\, 
-    {\sf S}^{-1}(\bfOmega_a){\sf R}(\bfOmega_a){\bf v}_b + {\sf J}_{t_r}(\bfOmega_a,{\bf t}_a)\bfomega_b],
+    {\sf S}^{-1}(\bfOmega_a){\sf R}(\bfOmega_a){\bf v}_b + {\sf J}_{t_r}(\bfOmega_a,{\bf t}_a)\bfomega_b].
     \label{eq:SE3vectoraddition}
 \end{multline}
+
+\subsubsection{The ${\sf S}^{-1}$ identity and coupling Jacobian}
 In (\ref{eq:rodrigues}) we only gave the expression for ${\sf S}$. We can use the
 properties of the finite ${\sf H}$ algebra with its characteristic polynomial ${\sf H}({\sf H}^2+{\sf I})=0$
 to obtain an expression for ${\sf S}^{-1}(\bfOmega_a)$. As an interesting fact, we meet the Rodrigues Jacobians again
@@ -1094,7 +1243,7 @@ Further, one can show that
     {\sf S}^{-1}(\bfOmega_a){\sf R}(\bfOmega_a) = {\sf R}(\bfOmega_a){\sf S}^{-1}(\bfOmega_a) =
     {\sf J}_{\omega_r}(\bfOmega_a),
 \eeq
-A more detailed calculation for the coupling Jacobien ${\sf J}_{t_r}$ yields
+A more detailed calculation for the coupling Jacobian ${\sf J}_{t_r}$ yields
 \beq
     {\sf J}_{t}(\bfOmega_a,{\bf t}_a) = {\partial [{\sf S}^{-1}(\bfOmega_a){\bf T}_a] \over
     \partial \bfOmega_a} \, {\sf J}_{\omega_r}(\bfOmega_a),\quad {\bf T}_a = {\sf S}(\bfOmega_a) \, {\bf t}_a.
@@ -1107,10 +1256,12 @@ We can show that
     \left( {\bf r}_a{\bf t}_a^T- t_a \;{\sf H}^2_a + {\bf t}_a{\bf r}_a^T \right) + \nonumber \\
     && {t_a\over\Theta_a} ({\sf S}(\bfOmega_a)-{\sf S}^{-1}(-\bfOmega_a)),
 \eeqar
-with $ t_a = {\bf r}_a\cdot{\bf t}_a$, which finishes the discourse on the $SE(3)$ motion group.
+with $ t_a = {\bf r}_a\cdot{\bf t}_a$, which finishes the discourse on the $SE(3)$ composition Jacobians.
 
-\subsection{additive versus composite derivative}
+%% -----------------------------------------------------------------------
+\subsection{Additive versus composite derivative}
 \label{app:incremental}
+%% -----------------------------------------------------------------------
 The Rodrigues formula (\ref{eq:rodrigues}) allows differentiation with respect to $\bfOmega$ directly,
 \beq
     {\sf R}(\bfOmega_0+\Delta\bfomega) \approx 
@@ -1136,36 +1287,6 @@ or explicitly
 \eeq
 with $k={\bf r}_0\cdot\Delta\bfomega$ and the usual definition $\Theta_0=|\bfOmega_0|$,
 ${\bf r}_0 = \bfOmega_0/\Theta_0$.
-
-\subsection{The $SU(2)/\mathbb{Z}_2 \cong SO(3)$ connection}
-The $SO(3)$ generating algebra ${\sf H}_i$ and the $SU(2)$ one with generators ${\sf u}_i$ have very similar structures,
-meaning there is an isomorphism between the algebras, $\mathfrak{so}(3) \cong \mathfrak{su}(2)$, 
-\beq
-      [{\sf H}_i,{\sf H}_j]_c = \varepsilon_{ijk}{\sf H}_k,\;
-      [{\sf u}_i,{\sf u}_j]_c = 2\varepsilon_{ijk}{\sf u}_k\;. \label{eq:su2-algebra-structure}
-\eeq
-Both, ${\sf H}_0$ and $${\sf u}_0$ are the identity matrices in each of their cases.
-The standard matrix representations are:
-\beq
-   {\sf u}_1 = \begin{pmatrix} 0 & i \\ i & 0 \end{pmatrix}, \; {\sf u}_2 = \begin{pmatrix} 0 & -1 \\ 1 & 0 \end{pmatrix}, \; {\sf u}_3 = \begin{pmatrix} i & 0 \\ 0 & -i \end{pmatrix}
-\eeq
-and for the Lie algebra $\mathfrak{so}(3)$ generators of the $SO(3)$ group
-\begin{IEEEeqnarray*}{c}
-   {\sf H}_1 = \begin{pmatrix} 0 & 0 & 0 \\ 0 & 0 & -1 \\ 0 & 1 & 0 \end{pmatrix},\quad
-   {\sf H}_2 = \begin{pmatrix} 0 & 0 & 1 \\ 0 & 0 & 0 \\ -1 & 0 & 0 \end{pmatrix},\\
-   {\sf H}_3 = \begin{pmatrix} 0 & -1 & 0 \\ 1 & 0 & 0 \\ 0 & 0 & 0 \end{pmatrix}\, .
-\end{IEEEeqnarray*}
-Other representations of $\mathfrak{su}(2)$ are possible and standard in Physics with changing the
-algebra-structure (\ref{eq:su2-algebra-structure}) slightly to $[{\sigma}_i,{\sigma}_j]_c = 2i\varepsilon_{ijk}{\sigma}_k$,
-welcome the Pauli-matrices here:
-\beq
-     \sigma_1 = -i {\sf u}_1\,,\quad \sigma_2 = i {\sf u}_2\,,\quad \sigma_3 = -i {\sf u}_3\, .
- \eeq
-Regardless of the isomorphic $\mathfrak{su}(2)$ representations, the generated group
-$SU(2)$ is not isomorphic to $SO(3)$, as can be seen from these formulas:
-\beq
-    R() = whatever
-\eeq
 
 \subsection{Definitions in the update formula}
 \label{app:updatedefs}
