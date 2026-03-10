@@ -1,0 +1,1312 @@
+\documentclass[conference]{IEEEtran}
+\usepackage{cite}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{epstopdf}
+
+\newcommand{\getname}[1]{eps/#1.eps}
+%\newcommand{\getname}[1]{pdf/#1.pdf}
+\newcommand{\real}{\Bbb R}
+\newcommand{\sinc}{\mathrm{sinc}\,}
+\newcommand{\bfomega}{\boldsymbol{\omega}}
+\newcommand{\bfOmega}{\boldsymbol{\Omega}}
+\newcommand{\adj}[1]{\mathrm{ad}({#1})}
+
+\newcommand{\meas}{\mathsf{\Sigma^{-1}_\mathrm{msr}}}
+\newcommand{\prior}{\mathsf{\Sigma^{-1}_\mathrm{prior}}}
+\newcommand{\sigmaff}{\mathsf{\Sigma^{-1}_\mathnormal{{ff}_r}}}
+\newcommand{\sigmaxx}{\mathsf{\Sigma^{-1}_\mathnormal{xx}}}
+\newcommand{\sigmazz}{\mathsf{\Sigma^{-1}_\mathnormal{zz}}}
+\newcommand{\sfSigma}[1]{\mathsf{\Sigma_\mathnormal{#1}}}
+\newcommand{\Jg}{\mathsf{J_\mathnormal{g_r}}}
+\newcommand{\Jom}{\mathsf{J_\mathnormal{\omega_r}}}
+\newcommand{\JMJ}{\mathsf{JMJ}}
+\newcommand{\JM}{\mathsf{JM}}
+\newcommand{\MJ}{\mathsf{MJ}}
+
+% statistical symbols
+\newcommand{\median}{\mbox{median\,}}
+
+% abbreviations for environments
+\newcommand{\beq}{\begin{equation}}
+\newcommand{\eeq}{\end{equation}}
+\newcommand{\beqar}{\begin{eqnarray}}
+\newcommand{\eeqar}{\end{eqnarray}}
+
+\newtheorem{algo}{Algorithm}[section]
+
+\begin{document}
+\title{Robust Bayesian estimation of nonlinear parameters on SE(3) Lie group from noisy measurments}
+\author{\IEEEauthorblockN{Frank O. Kuehnel}
+\IEEEauthorblockA{USRA/RIACS\\ NASA Ames Research Center\\ MS 269-2\\
+Moffett Field, CA 94035-1000\\ Email: kuehnel@email.arc.nasa.gov} }
+\pagestyle{empty}
+%\keyword{bundle Adjustment, Scene Reconstruction, SLAM, Lie groups, Optimization}
+
+\maketitle
+
+\hrule
+\begin{abstract}
+Sensors are physical devices that take measurements of a source
+from a specific pose. In general the pose constitutes of three parameters for
+the position and another three for the heading. In many scenarios the
+geometric relationship between sensor and source is precisely known. However,
+in the field of autonomous robot navigation, neither the robot (sensor) pose 
+nor the environment (source) is known, but in principle can be determined by
+measurements. The problem of self localization  from noisy measurements is known as SLAM.
+Possible sensors are laser range finders (3D data)
+or cameras (2D data measurements). Interestingly, the quality of the pose
+estimates depends on its particular parametrization. We show that in the case of
+merging 3D range data, the full exponential Lie Cartan coordinates of 1.st kind
+provide the best unbiased estimates when assuming a Gaussian noise model on the
+measurements. Further, we show that in the case of projective 2D camera measurements,
+a joint posterior estimate of camera pose and environment is computationally
+not advantageous. Instead, a marginalized posterior over the environment should
+be considered. The marginalization over the non-gaussian variables has to be performed
+carefully using a Saddlepoint approximation method.
+\end{abstract}
+\hrule
+
+\section{Introduction}
+
+The basic challange of automomous robotic exploration is to safely interact with
+natural environments. Sensors, such as cameras, laser range finders or ultra-sound
+constitute the essential input. In order to plan and execute a route towards a target,
+a three dimensional representation of the environment will be needed. Such a map can
+be given a priori or has to be built along the way. In either way, the robot has to
+localize itself within the environment.
+
+Traditionally, video cameras were thought to be a proper input for a guidance system.
+Years of computer vision research has led to numerous approaches of how to extract useful
+information from an array of numbers, that is indeed the internal computer representation of
+a camera image. One key interest in this research field, is the identification of objects.
+Another one is the inference of the 3 dimensional geometry of the environment.
+The general problem to infer 3 dimensional geometry from 2 dimensional motion is
+described as structure form motion (SFM). Robustness and reliability requirements have led
+to the development of a statictical framework to address this problem. Statistical sampling
+techniques, such as Least Median Squares (LMedS) , RANSAC and maximum likelihood (ML) or
+maximum a posteriori (MAP) estimators are used in this contex.
+
+In robotics research, the problem of navigating through unkown environments
+is addressed in a slightly different formulation as simultaneous localization and mapping (SLAM).
+Here, the solution techniques are based on recursive probabilistic inference. Noteably,
+the use of particle filter (PF) techniques for the use of probability representations
+dominates this field.
+
+Both in recursive methods such as in SLAM and in the bundle-ajustment techniques used in computer
+vision the common problem is to determine the robot heading, or camera pose. Once the camera pose(s) is
+known, triangulation in the case of camera observation or simply fusion of laser range finder maps
+readily yields the 3 dimensional map. In general, 6 degrees of freeedom (DOF) have to be considered
+for the pose estimate. Uncertainty in the pose estimate can produce significant distortion in the
+3D map. For most accurate pose determination, ML/MAP estimation on the whole data set has proven to
+be the best approach. This techniques is called Bundle-Adjustment in computer vision and is
+intrinsically non-recursive and rather computationally expensive since it may involve large data sets.
+
+In this paper we address the problem of highly accurate pose estimation. We will formulate a parametric
+uncertainty representation for the camera pose and develop an efficient estimation scheme. We will use
+the notion of the special eucldian group $SE(3)$, as a framework for inference.
+The main focus will be on the application towards the bundle-adjustment procedure. 
+{\bf The role of parametrization:}
+It was observed that proper parameterization of the camera pose plays a crucial role.
+Euler angle parametrization of the orientational component of the camera pose proved to be the least
+numerically stable approach. Global quaternion or Rodrigues parametrization greatly improve the stability of
+least squares minimization algorithms. Up to date techniques use incremental, {\em local}, Rodrigues
+parametrization \cite{triggs-bundle}.  Whereas the focus for bundle-adjustment lies on the performance
+of non-linear minimization algorithms, recursive methods deal with finite probability parametrizations to
+capture the error model. To our knowledge, the role of error models in parameter estimation over a non-euclidian manifold 
+such as $SO(3)$ and $SE(3)$ hav been rarely addressed. In \cite{pennec97} the notion of compositional noise
+was adopted.
+
+\section{Probabilistic framework for the SLAM problem}
+The simultaneous localization and mapping (SLAM) problem is adequately formulated in a probabilistic framework. Solving SLAM is
+finding the joint probability distribution of the camara pose $f_t$ and a set of 3D landmarks $\{{\bf x}^j\}_t$ representing the knowledge about the environment at present time step $t$
+\beq
+    P(f_t,\{{\bf x}^j\}_t| {\bf z}_{1:t},{\bf u}_{1:t}) \label{eq:masterSLAMprob}
+\eeq
+given all past and present observations ${\bf z}_{1:t}$ and if available the history
+of internal odometry data ${\bf u}_{1:t}$.
+The 3D landmarks $\{{\bf x}^j\}$ and the parameterized camera pose $f_t$ are defined
+with respect to a global world frame $W$. Also, we have assumed that the association
+({\em correspondence}) problem
+between observed feature $z^j$ and landmark ${\bf x}^j$ is solved.
+
+\subsection{Recursive filter versus bundle adjustment}
+Using Bayes theorem a solution to (\ref{eq:masterSLAMprob}) can be derived recursively,
+\begin{multline}
+     P(f_t,\{{\bf x}^j\}_t| {\bf z}_{1:t},{\bf u}_{1:t}) \propto P({\bf z}_t | f_t,\{{\bf x}^j\}_t) \times \\
+     \iint P( f_t | f_{t-1}, {\bf u}_t) P( \{{\bf x}^j\}_t | \{{\bf x}^j\}_{t-1} ) \times \\
+     P(f_{t-1},\{{\bf x}^j\}_{t-1} | {\bf z}_{1:t-1},{\bf u}_{1:t-1} ) \; df_{t-1}\prod_j \, d{\bf x}^j_{t-1},
+\label{eq:SLAMrecursive}
+\end{multline}
+where the proportionality only neglects the measurement error distribution.
+Eqn.~(\ref{eq:SLAMrecursive}) is exact for general probability distributions and states that we can make
+optimal use of all the measurements in a serial ({\em recursive}) fashion;  We keep only knowledge of the present camera pose $f_t$ and the 3D environment $\{{\bf x}^j\}_t$, which is derived by weighing the knowledge about the robots pose and the 3D environment at a previous time step against the current observation. Practically, 
+Eqn.~(\ref{eq:SLAMrecursive}) is approximated by a Kalman filter (KF) technique, which assumes
+that all probabilities are sufficiently described by at most second order moments.
+
+In bundle adjustment, the full robot path $f_{1:t}$ and the 3D environment is inferred simultaneously. At first glance, it seems that valuable information is lost in the recursive procedure (\ref{eq:SLAMrecursive}),
+since we only retain the current pose. However, marginalizing the bundle adjustment result over all the past
+camera poses $f_{1:t-1}$, will yield the recursive solution (\ref{eq:SLAMrecursive}),
+\begin{multline}
+    P(f_t,\{ {\bf x}^j \}_t | z_{1:t},u_{1:t}) = \int P(f_{1:t},\{ {\bf x}^j \}_t | z_{1:t},u_{1:t}) \; df_{1:t-1} \\
+    \shoveleft{\propto P(z_t | f_t,\{ {\bf x}^j \}_t) \int df_{t-1} \; P( f_t | f_{t-1}, u_t) \times} \\
+    P(z_{t-1} | f_{t-1},\{ {\bf x} \}_t) \int df_{t-2} \;  P( f_{t-1} | f_{t-2}, u_{t-1}) \times \ldots \\
+    \int df_1 \; P(f_{1}, \{ {\bf x}^j \}_t | z_{1},u_{1}) \label{eq:SLAMmarginal}.
+\end{multline}
+Expressions (\ref{eq:SLAMrecursive}) and (\ref{eq:SLAMmarginal}) are equivalent if we assume a stationary
+3D environment,
+\beq
+    p( \{ {\bf x}^j \}_t | \{ {\bf x}^j \}_{t-1} ) = \prod_j \delta( {\bf x}^j_t - {\bf x}^j_{t-1} ). \label{eq:static3D}
+\eeq
+Though, Eqns~(\ref{eq:SLAMrecursive},\ref{eq:SLAMmarginal}) are exact, from a practical standpoint we have to be concerned with the numerical representation of probability distributions.
+Mostly used in the SLAM problem context are ensemble representations with Eqn.~(\ref{eq:SLAMrecursive}) realized by
+particle filters (PF). Although, various KF implementations for the joint probabilities have been tested, a gaussian
+probabilty representation has been found computationally insufficient\cite{Thurn}. A simple recursive KF implementation of (\ref{eq:SLAMrecursive}) will result in exceedingly large covariance matrices, therefore rendering
+it impractical for real applications with an increasing number of landmarks. Also, it has been reported that KF implementations result in underestimating the robot pose uncertainties, thus causing serious problems for loop-closing.
+
+\section{Parametric uncertainty represention for camera pose}
+
+As has been shown for a wide class of statisitcal processes, a finite parametric representation
+for the distribution is not available. In \cite{Mfm-Steffano} it has been argued that at most
+we can expect to find a sub-optimal parametric representation. The simplest thereof is a system
+of gaussian random variables, with the mean $\mathbf{\mu}$ called the statevector and $\mathsf \Sigma$
+the covariance matrix.
+
+Notation: vectors are denoted with bold face characters ${\bf x}, {\bf T}, \ldots$
+matrices are given as sans serif characters $\mathsf{R}, \mathsf{\Sigma}$.
+
+\subsection{Motivational experiment}
+Suppose we have a global map consisting of $N$ 3D landmarks $\left\{ {\bf x}^j \right\}$ with reference to the world frame. A robot equipped with a laser range scanner identifies the 3D landmarks in its particular camera frame
+$f_0\in SE(3)$\footnote{$SE(3) \cong SO(3)\times\real^3$ stands for the Special Euclidean group of rigid body motions in $\real^3$, see Appendix \ref{app:SE3group}}.
+In general we only have knowledge of the identified 3D landmarks $\left\{ {\bf x}^j \right\}$ in the global map
+and their corresponding range measurements in the yet to be determined camera frame $f_0$. The range
+measurements are essentially the identified 3D landmarks transformed into the camera frame $\left\{ {\bf p}^j \right\}$. Then, our task is to recover the camera pose ({\em camera localization}) $f_0$, using only the
+matched sets of 3D points. In other words, we use the following Likelihood estimator,
+\beq
+    f_0 = \arg\min_{f \in SE(3)} \sum_j^N \; \left| {\sf R}(\bfOmega_f) {\bf x}^j + {\bf T}_f - {\bf p}^j \right|^2.
+   \label{eq:minimumpose}
+\eeq
+Eqn.~(\ref{eq:minimumpose}) can be solved exactly, the solution may not be unique for points on
+degenerate surfaces. In the center of "mass" coordinates ${\bf x}_c$ with ${\bf x} = \tilde{\bf x}
++ {\bf x}_c$, we can decouple the rotational and translational "modes", then the solution is
+\beq
+    \bfOmega_{f_0} = \arg\min_{\bfOmega_f \in SO(3)} \sum_j^N \left| {\sf R}(\bfOmega_f)\tilde{\bf x}^{j} - \tilde{\bf p}^{j}
+    \right|^2\; . \label{eq:bestrotation}
+\eeq
+We solve for the optimal rotation ${\sf R}(\bfOmega_{f_0})\in SO(3)$, using Horn's quaternion method
+\cite{Horn87,Horn88}. Once, having found the optimal rotation it is straightforward to solve for
+${\bf T}_{f_0} = {\bf p}_c - {\bf R}(\bfOmega_{f_0}){\bf x}_c$. We call $f_0$ the zero noise estimate.
+
+In any real scenario, we cannot assume impeccable knowledge of the 3D map nor perfect noise free measurements. For simplicity
+we model our inaccurate knowledge of the global map as additive gaussian noise with constant variance on the 3D landmarks
+${\bf x}^j \sim {\cal N}(\bar{\bf x}^j,\sigma)$. We initialize our experiment with a critical number $N=3$ points
+${\bf x}^j$ randomly distributed in the cube $[-1,1]$ around the origin. The camera is located outside the cube,
+$T_{f_0} = [0,0,-10]$ and its view directed towards the center. The corresponding points ${\bf p}^j$ are
+computed. We sample the estimated camera pose parameter distribution, Fig.~\ref{fig:addanalysis},\ref{fig:companalysis},
+by corrupting the original landmarks ${\bf x}^j$ with gaussian noise of zero mean and variance $\sigma=1.0$.
+\begin{figure}
+    \centering
+    \includegraphics[width=4.2cm]{\getname{SE3addomega}}
+    \includegraphics[width=4.2cm]{\getname{SE3addT}}
+    \caption{Projected sample distribution for rotational components $\Delta\bfOmega=\bfOmega-\bfOmega_{f_0}$ on the left side,
+    and the translational coordinates $\Delta{\bf T}={\bf T}-{\bf T}_{f_0}$ on the right. It is clearly seen that the translational
+    estimates are biased.}
+    \label{fig:addanalysis}
+\end{figure}
+\begin{figure}
+    \centering
+    \includegraphics[width=4.2cm]{\getname{SE3compomega}}
+    \includegraphics[width=4.2cm]{\getname{SE3compt}}
+    \caption{The same sample distribution as in Fig.\ref{fig:addanalysis} is plotted in SE(3) exponential coordinates, given
+    by $\ln (f_0^{-1} \cdot f) = [\Delta\tilde{\bfOmega}, {\bf t}]$, the distribution is less biased since it is centered around the origin and
+    seems to show gaussian behavior, see further sections and App.~\ref{app:SE3group}.}
+    \label{fig:companalysis}
+\end{figure}
+
+Interestingly the estimated parameter distribution shows strong bias if we choose the minimal parametrization
+$[\bfOmega, {\bf T}]_{L_2}$ as a conjunction\footnote{we denote the conjunction of real valued parameters
+according to MATLAB notation by $ [ a, b,\ldots ]$. The subscript $L_2$ pertains to the notion of the coordinate system, details are in the
+Appendix.
+We note that the conjunction of various quantities doesn't constitute a proper vector.} of Rodrigues vector
+and translational vector. For an unbiased estimate we
+expect the mean of the parameter sample distribution around the zero noise estimate
+$[\bfOmega_{f_0}, {\bf T}_{f_0}]_{L_2}$. This is clearly not the case in Fig.\ref{fig:addanalysis}. However, if we choose
+to parameterize the camera pose by full exponential coordinates $[\bfOmega, {\bf t}]_{L_1}$, we obtain an almost unbiased estimate, Fig.\ref{fig:companalysis}.
+Some insight can be gained by the following argument: If we assume an unbiased distribution in exponential
+coordinates $ < [\bfOmega, {\bf t}]_{L_1} > = 0$ where correlations between
+rotational and translational components exist $< \Omega_\alpha t_\beta > \neq 0$,
+then due to the algebraic connection (\ref{eq:rodrigues}) between exponential coordinates and translational vector the
+estimate for the translational vector ${\bf T}$ will be biased $< {\bf T} > = < {\sf S}(\bfOmega) {\bf t} > \neq 0$.
+
+\subsection{Camera Pose in the $SE(3)$ Lie group context}
+
+In the context of continuous groups, exponential coordinates play an essential role.
+In this section we will briefly introduce the notion of groups to represent camera frames. More details can be found in the Appendix\ref{app:SE3group} as well as in abundant literature \cite{liegroups}.
+
+The Rodrigues vector $\bfOmega$ constitutes the exponential parametrization of a rotation matrix ${\sf R}(\bfOmega)$.
+Together with the translation vector ${\bf T}$, we obtain a 6 parameter minimal representation of a frame. Intuitively, we can visualize a frame using the picture of a trihedron with 3 degrees of freedom (DOF)
+for the origin and another 3 DOF for the orientation. The set of all possible frames form the $SE(3)$ group, where we adopt the following notation for its elements
+\beq
+    f \cong ({\sf R}(\bfOmega_f),{\bf T}_f) \in SE(3).
+    \label{eq:SE3representation}
+\eeq
+The terms rigid body motion, frame and camera pose can be used synonymously.
+In order to see how $f$ encodes the rigid body motion, frame or camera pose information,
+we define another important operation ({\em action}) on 3D points ${\bf x}$.
+A point ${\bf x}$ as well as a camera frame $f = ({\sf R}_f,{\bf T}_f)$ is defined with
+respect to a global world frame $W$, then
+a change to the camera frame will transform the coordinates of ${\bf x}$ according to
+\beq
+    {\bf x}_{f} = f\star {\bf x} = {\bf R}_{f}\; {\bf x} + {\bf T}_{f}. \label{eq:SE3action}
+\eeq
+Vice versa, we could imagine that a set of 3D points ${\bf x}_{f}$ are rigidly attached to a frame $f$,
+then we speak of a rigid-body motion if time-dependent transformation parameters $f^{-1}(t)\cong({\sf R}_{f(t)},{\bf T}_{f(t)})$ can be found such that they explain the dynamical evolution of those points seen in the world frame,
+${\bf x}(t) = f^{-1}(t)\star {\bf x}_f$.
+
+The operation between group elements is the composition $g=h\cdot f$, here
+\beq
+    ({\sf R}(\bfOmega_h),{\bf T}_h)\cdot ({\sf R}(\bfOmega_f),{\bf T}_f) =
+    ({\sf R}(\bfOmega_h){\sf R}(\bfOmega_f), {\sf R}(\bfOmega_h) {\bf T}_f + {\bf T}_h).
+    \label{eq:groupcomposition}
+\eeq
+The nature of this composition is a semi-direct product. Rotations only compose with
+rotations but translations also interact with rotations. Thus, the composition is non-commutative
+since finite rotations are not interchangeable with each other and with translations. In mathematical terms, the matrix
+representation of (\ref{eq:SE3representation}) leads to the equivalent non-commutative matrix
+multiplication as the composition. Fig.~\ref{fig:framecomposition}
+graphically illustrates the interpretation of left and right composition.
+
+Amongst the list of various representation for $f\in SE(3)$ are the so called minimal
+representations. A matrix representation (\ref{eq:SE3matrixrepresentation}) is not minimal, neither is
+the quaternion representation for rotations. When dealing with optimization or estimation problems,
+minimal representations are highly favorable. Non-linear constraints exist for over-paramatrized
+representations, they have to be artificially inforced in the optimization procedure and frequently
+diminish the convergence performance.
+Indeed there are many coordinate representations $[\bfOmega,{\bf T}]$, such as various Euler angles, that are
+minimal. The variety of coordinates comes from the non-commutative ordering of
+primitive building blocks ({\em generators}) of the $SE(3)$ group, see Appendix.
+
+Seemingly, the choice of a particular coordiante system is arbitrary. However, it has been found
+numerically that gradient based optimization with Euler angles is not stable. This is due to the gimbal lock \cite{}, further is has been reported that incremental Rodrigues vector updates are preferable to an additive update \cite{Soatto}, also see Appendix \ref{app:incremental}. The choice of proper coordinates strongly affects the convergence performance of gradient based optimization algorithms.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=8cm]{\getname{SE3comp}}
+    \caption{If $f(t)\in SE(3)$ describes the motion of the rigid body $F$ in time $t$ with respect to frame $W$,
+    then $h^{-1}\cdot f(t)$ with $h=({\bf R}_h,{\bf T}_h)$ is that very same motion seen from frame $W^\prime$.
+    We could interpret the case a) as a change in the inertial frame $W\rightarrow W^\prime$. The effects of a
+    right composition are illustrated in figure b). Suppose $F$ is the space-station, then we could describe the
+    launch $h(t)$ of a rocket $F^\prime$ with respect to frame $F$. When the rocket dynamics is observed from the
+    world frame $W$ we simply have to calculate $f(t)\cdot h(t)$. Hence a right hand composition effectively
+    mediates a change in the ridig body frame $F\rightarrow F^\prime$.} 
+    \label{fig:framecomposition}
+\end{figure}
+
+In parameter estimation the focus lies on estimating the uncertainty distribution given noisy measurements.
+Our experiment shows that the choice of a coordiante system can introduce considerable bias. Interestingly,
+it was previously noted that in the context of $SE(3)$ pose estimation, an additive parameter noise model
+is not applicable \cite{Pennec}.
+
+In short we want to advocate the view that all coordinate systems are connected via the exponential representation, a representation in which all coordinates commute, hence the issue of the ordering doesn't exist. This coordinate mimicks a euclidian vector space. The advantage is that we can define a parametric uncertainty representation for estimates in those coordinates analogous for additive random variables.
+
+\subsection{Uncertainty in exponential coordinates}
+
+A standard approach to probabiliy theory, is to cast the calculus of probabilites into measure theory. The measure $\mu:SE(3)\rightarrow\real$ is defined over a set, here a differentiable manifold, and obeys the rules of a sigma algebra. In euclidian spaces, we have an intuitive picture of multivariate probability distributions. If we somehow could connect $SE(3)$ to a euclidean space we would side step plenty mathematical definitions to justify our approach. Fortunately, this connection can be made by means of the exponential map. However, the map is not globally invertible, there exists only locally the function, $\ln: SE(3) \rightarrow T_{1}SE(3)\cong \real^6$. For the moment we side step the problem of global invertibility, and define a probability measure $p:T_{1}SE(3)\rightarrow \real$, we also make use of the compositive nature of the group operation $f = f_0\cdot \Delta f$,
+\beq
+    \int_{SE(3)} \; F( f ) d\mu(f) \equiv \int_{\real^6} \; F( f ) p_{f_0}(f_0 \cdot \Delta f)\,
+    d{\bf t}d\bfOmega
+    \label{eq:measureSE3}
+\eeq
+where $F:SE(3)\rightarrow\real^n$ is an arbitrary well-behaved function and $\Delta f = \exp([\bfOmega,{\bf t}])$.
+
+Adressing the invertibility problem, in practice we assume that the probability density to find a
+camera pose $f\in SE(3)$ is mono-modal and has its maximum at $f_0$. Further we assume that
+the main weight of localization is narrowly confined around this maximum. Despite that the integration
+domain in (\ref{eq:measureSE3}) is infinite, the main weight only stems from a narrow region around $f_0$ and
+a local connection between $SE(3)$ and $\real^6$ is garantueed. Hence, we choose
+a gaussian distribution in the local tangent space $T_{f_0}SE(3)$ as a plausable parametric approximation
+to the "real" underlying probability,
+\beq
+     p_{f_0}(f) \equiv p(\ln f_0^{-1}\cdot f ) \sim {\cal N}( {\bf 0}, \sigmaff )
+    \label{eq:SE3rightdist}
+\eeq
+Put verbally, the probability (\ref{eq:SE3rightdist}) to find the camera pose $f = f_0 \cdot \Delta f$
+is defined by the probability to find a right deviation vector ({\em generator}) $\ln \Delta f \in se(3) \cong \real^6$,
+\beq
+    p(\ln\Delta f) \propto \exp( -{1\over 2} [{\bfOmega},{\bf t}]\, \sigmaff \, [{\bfOmega},{\bf t}]^T ),\;
+     \label{eq:SE3rightdistexplicit}
+\eeq
+where $\sigmaff$ is the real valued $6\times 6$ inverse covariance matrix. 
+We can interpret the vector $\ln \Delta f$ as the geodesic distance on the
+manifold $SE(3)$ between the points $f$ and $f_0$.
+
+For notational purpose, we can concisely write an uncertainty frame with mean
+$f_0$ and gaussian error model for the deviation $\Delta f$ as $\hat{f}=(f_0, \sfSigma{ff_r})$.
+The covariance matrix ${\mathsf \Sigma}_{ff_r}$ has the subscript $r$ to explicitly denote
+that right-hand composition $f_0\cdot\Delta f$ is used. Equally well, we could have choosen to compose the
+"noise" term $\Delta f$ to the left of $f_0$. It can be shown, that there is a correponding "left" distribution,
+\beq
+    f=\Delta f \cdot f_0, \quad {\mathsf \Sigma}^{-1}_{ff_l} =
+    {\sf J}_{\rm lr}^T(f_0)\, \sigmaff \,{\sf J}_{\rm lr}(f_0),
+    \label{eq:SE3leftdist}
+\eeq
+where ${\sf J}_{lr}(f_0) \in \real^{6\times6}$ is the Jacobian matrix associated with the Lie-Derivative
+at point $f_0$, see Appendix B. The distinction between "left" and "right" distribution stems from the nature
+of the non-commutative composition of group elements of a differentiable manifold. For commutative groups
+both distributions coincide!
+
+\subsection{Transformation of frame and point probability densities}
+
+It is clear from the definitions above that a left composition with $g$ (frame transformation) of
+an uncertainty frame with a right hand noise model $\hat{f}=(f_0, \sfSigma{ff_r})$, will not affect the noise model
+of the compounded frame, $g\cdot f_0\cdot \Delta f$. This is in accordance with the composite noise model
+introduced in \cite{Pennec}. But what happens, if the left composition is also an uncertainty frame? It can be shown that the compostion of two uncertainty frames $\hat{g}=(g_0,\sfSigma{gg_r})$ and $\hat{f}=(f_0,\sfSigma{ff_r})$ yields
+\beq
+\begin{split}
+    \hat{h}=\hat{g}\circ \hat{f}\; \longrightarrow h_0 &=g_0 \cdot f_0\, ,\\
+    \sfSigma{hh_r} &= \sfSigma{ff_r} + {\sf J}_{\rm lr}(f_0) \sfSigma{gg_r}
+    {\sf J}_{\rm lr}^T(f_0). \label{eq:SE3uncertcomp}
+\end{split}
+\eeq
+Eqn.~(\ref{eq:SE3uncertcomp}) simpilfies  to the abovementioned case if $\hat{g}$ is a certain frame transformation
+with $\sfSigma{gg_r} = 0$. Similarly, we can connect the uncertainty frame $\hat{f}$ to its inverse $\hat{f}^{-1}$,
+\beq
+    \hat{f}=(f_0,\sfSigma{ff_r}) \rightarrow \hat{f}^{-1}=(f_0^{-1},{\sf J}_{\rm lr}^{-1}(f_0)
+    \sfSigma{ff_r}{\sf J}_{\rm lr}^{-T}(f_0)).
+\eeq
+
+Another important operation of frames is their action on 3D points (\ref{eq:SE3action}).
+Given a gaussian probability distribution for a 3D landmark $p({\bf x})$ we like to know its
+distribution when we apply a certain frame $f_0$. It is easily shown that the following holds
+\beq
+\begin{split}
+    p({\bf x})   \sim {\cal N}(\bar{\bf x}, \sfSigma{xx}) \; \rightarrow \;
+    p({\bf x}_{f_0}) \sim {\cal N}(\bar{\bf x}_{f_0}, \sfSigma{xx_{f_0}})\, , \\
+    \sfSigma{xx_{f_0}}= {\sf R}_{f_0} \sfSigma{xx} {\sf R}_{f_0}^T.
+    \label{eq:3Dptrafo}
+\end{split}
+\eeq
+Finally, we consider the case where a 3D landmark distribution is transformed into an uncertainty frame
+$\hat{f} = (f_0,\sfSigma{ff_r})$ and we "marginalize" over the frame uncertainty,
+\beq
+    p({\bf x}_{\hat{f}}) = \int_{\real^6} \, p({\bf x}_{f_0 \cdot \Delta f}) p( \ln \Delta f) \,
+    d{\bf t}d\bfOmega\; .
+    \label{eq:marginSE3}
+\eeq
+Despite that the probability distributions in the integrand (\ref{eq:marginSE3}) are gaussian, the resulting
+marginalized distribution is in general non-gaussion. The integral can be computed in approximation, then
+the following holds
+\beq
+    p({\bf x}_{\hat{f}}) \approx  {\cal N}(\bar{\bf x}_{f_0}, \sfSigma{xx_{f_0}} +
+    {\sf J}_\star \sfSigma{ff_r} {\sf J}_\star^T), \;\,
+    {\sf J}_\star = {\sf R}_{f_0} {\sf J_\times}({\bf x}), \label{eq:SE3approxmargin}
+\eeq
+where we use the defininiton, ${\sf J_\times}({\bf x}) = [-[{\bf x}]_\times, {\sf I}]_{3\times6}$.
+
+\section{Application to SFM problem}
+
+Structure form Motion (SFM) stands for a set of problems to infer the 3 dimensional
+geometry of an underlying natural scene from a sequence of camera views alone.
+The camera observations are 2 dimensional in their projective nature. To a high degree it is
+arguable what constitutes a good observation or measurement. Various heuristic approaches have
+been taken, most commonly used are 2D point features that are identifyable in various camera views,
+but also line features or higher polygonal shapes have been proposed.
+% do citations here
+
+In this paper, we will not address the data association problem, that is how to decide whether
+feature observations in various camera views belong to the same underlying geometric object. 
+In the following we deal only with point features and a static scene, meaning that only observer camera
+motion is allowed. In principle, inference in the Bayesian framework can be extended to
+any measurement and handle non-static scenes. However, this is beyond the scope of this paper.
+
+In the next section we present the traditional F-matrix approach which is strictly applicable only to
+2 camera views and point features. Following that, we address the inference process
+in the Bayesian framework and conclude with numerical experiments. 
+
+\subsection{ F-matrix estimation methods }
+
+Literature on F-matrix methods and epipolar geometry is certainly too abundant to be cited here,
+hence we refer to \cite{Zhang-96, Faugeras-Book} for details and summarize only a few results in the following.
+
+When two camera poses are precisely known, a landmark seen in both views, ${\bf p}=[u,v,1]$ in camera 1 and its corresponding
+view ${\bf q}$ in camera 2, can be readily triangulated. The position of the landmark in 3D space is easily inferred.
+The consistent triangulation of landmarks in 3 dimensions constitutes a strong constraint for the relative camera pose.
+Therefore, it is possible to determine the relationship between 2 camera poses from a set of at least 5 landmark measurements.
+The constraint is effectively stated in a linear relationship, the fundamental matrix\footnote{the linear constraint requires
+at least 8 point pair correspondences.} ${\bf F}$,
+\beq
+          {\bf q}_i^T {\bf F} {\bf p}_i = 0 \;. \label{eq:Fmatrix}
+\eeq
+We note that there is no equivalent constraint in 2 dimensions, the reason is for any camera pose we can find a consistent
+triangulation.
+
+The fundamental matrix ${\bf F}$ encodes the relative heading and position of camera 2 with respect to the first one.
+Hence, we can assume camera 1 at the origin with heading into the positive Z-axis.
+The distance $\lambda$ between the two cameras cannot be determined from 2 views only, since any
+${\bf F}_\lambda = \lambda [{\bf T}]_\times {\bf R}$ is a valid fundamental matrix with (\ref{eq:Fmatrix}).
+Not only is there a scale ambiguity, also the decomposition into translation ${\bf T}$ and rotation ${\bf R}$
+is four-fold degenerate (if we consider the scale $\lambda > 0$) and has to be resolved by other arguments.
+
+\begin{figure}
+    \centering
+        \includegraphics[width=4cm]{\getname{LMedSqomega}}
+        \includegraphics[width=4cm]{\getname{LMedSqtexp}}
+    \caption{Sample distribuition (2000 samples) of Least Median Squares estimates for rotation (left)
+      and translation (right) from 68 data points corrupted with gaussian noise with $\sigma = 0.8\%$ of image dimensions} 
+    \label{fig:LMedSq}
+\end{figure}
+
+The exact algebraic relationship (\ref{eq:Fmatrix}) between 2 views cannot be maintained for
+noisy measurements. Various estimators have been proposed that extend (\ref{eq:Fmatrix}) to
+noise and outlier prone measurements. Most frequently used are the RANSAC and Least Median of Squares
+(LMedS) method. Both methods are based on a distance metric $d^2( {\bf q}, {\bf F}{\bf p})$. The LMedS
+method yields the smallest value for the median of squared residuals, computed for the entire data set
+\beq
+  M_J= \median r_i^2, \quad r_i^2=d^2({\bf q}_i, {\bf F}_J {\bf p}_i) + d^2({\bf p}_i, {\bf F}_J^T{\bf q}_i),
+\eeq
+where ${\bf F}_J$ is based on a small sub-sample $J$ of the entire data set. The estimate ${\bf F}_J$ pertaining to
+the minimum $M_J$ is considered the best robust estimate. Even though LMedS can handle up to  $50\%$ outlier with
+a sufficient number of sub-samples, the algorithm performs poorly on measurements corrupted with gaussian noise.
+
+In \cite{Zhang-96} it is suggested to amend the result from the LMedS method by an additional M-estimator step.
+Fig.~\ref{fig:LMedSq} shows a projected sample distribution where the original zero noise data has been corrupted
+with gaussian noise with $\sigma=0.8\%$ of image dimensions. Although the LMedS estimator with addtional reweighted
+least squares achieves some degree of robustness, tries to concentrate the
+sample around the zero noise estimate, we still have significant samples ``far'' away from the undisturbed
+estimates. For an image with 512 pixels dimensions, $0.8\%$ noise corresponds to $\pm 2$ pixel error. The common problem
+with the F-matrix estimators remains, even in absence of gross outliers but a larger set of ``lesser''  quality
+measurements doesn't yield a sufficiently well behaved estimator distribution.
+The statistical distribution in Fig.~\ref{fig:LMedSq} is not sufficiently described by a second momement approximation.
+
+Next, we discuss the estimation process in the Bayesian framework, as ''fitting'' a model to the observation. 
+
+\subsection{Bayesian estimation of joint distribution}
+
+The joint probability distribution $p(f,{\bf x} | {\bf z})$ for camera pose $f$ and 3D model ${\bf x}$ is to be inferred from
+observations ${\bf z}$. With Bayes rule we can write in the case of factorizable priors,
+\beq
+    p(f,{\bf x}| {\bf z}) \stackrel{\rm Bayes}{\propto} p({\bf z}| f,{\bf x})p({\bf x})p( f).
+    \label{eq:simpleBayes}
+\eeq
+The observation of a single landmark ${\bf z}$ causes a mutual dependence of camera pose $f$ and
+landmark location ${\bf x}$. We assume the following observation model for the likelihood
+\beq
+    p( {\bf z}| f,{\bf x} ) \propto \exp[ -{1\over 2} ({\bf z}-\pi( f\star {\bf x}))^T
+    \sigmazz \, ({\bf z}-\pi( f\star {\bf x})) ], \label{eq:likelihood}
+\eeq
+where $\pi({\bf x}') = [x_1^\prime/x_3^\prime,x_2^\prime/x_3^\prime,1]$ is the projective function.
+Further, we may assume that the priors are given as
+\beq
+    p( {\bf x} ) \sim {\cal N}({\bf x}_0, \mathsf{\Sigma}_{xx} ),\quad p( f ) \sim {\cal N}( f_0, \Sigma_{ff_r} ).
+    \label{eq:simpPriors}
+\eeq
+In general the probability distribution (\ref{eq:simpleBayes}) can be multimodal and have significant non-gaussian moments.
+Ensemble representations are adequate to handle the general case. However, for mono-modal cases we promote
+the view that it is sufficient to consider
+the MAP estimate of (\ref{eq:simpleBayes}). Practically, the MAP estimate is obtained using non-linear optimization
+techniques based on iterative local linearizations combined with a gradient decent type update step.
+
+\subsubsection{linearization of observation model:}
+
+Linearization of the observation function $\pi$ in (\ref{eq:likelihood}) at ${\bf x}^\prime_t = f_t\star{\bf x}_t$
+yields,
+\beq
+    \Delta {\bf z}_t = {\bf z} - \pi(f_t\star {\bf x}_t),\quad {\sf P}_t =
+    \left[ {\partial \pi\over \partial {\bf x}^\prime_t} \right],
+\eeq
+particularly we have
+\beq
+    \pi({\bf x}^\prime)=[u,v,1] \quad
+    {\sf P}={1\over x_3^\prime}\left(
+    \begin{array}{ccc}
+        1 & 0 & -u \\
+        0 & 1 & -v \\
+    \end{array} \right), \label{eq:projectivefunc}
+\eeq
+where the singularity at $x_3^\prime=0$ can be eliminated by a view frustum. The effects of a
+finite field of view and a shift between optical and geometrical center of the sensor is modeled by a
+simple calibration matrix ${\sf K}$. With the substitution
+${\bf z} \rightarrow {\sf K}^{-1}{\bf z}$ and $\sigmazz \rightarrow {\sf K}^T\, \sigmazz \, {\sf K}$
+all the following considerations remain valid.
+
+The derivatives of the transformed points with respect to 3D landmarks ${\bf x}$ and a right deviation of
+the camera pose $f\rightarrow f\cdot\delta_rf$ is compactly written as,
+\beq
+    {\partial(f\star{\bf x})\over \partial {\bf x}} = {\sf R}_f,\quad
+    {\partial(f\star{\bf x})\over \partial {\delta_r f}} = {\sf R}_f \,
+    {\sf J_\times}({\bf x}),
+\eeq
+where the defininiton for ${\sf J_\times}({\bf x})$ was given in (\ref{eq:SE3approxmargin}).
+
+\subsubsection{linearization of prior:}
+
+The prior probabilitiy distribution (\ref{eq:simpPriors}) has to be linearized also at $[f_t,{\bf x}_t]$.
+Firstly, let's address the 3-D landmark prior distribution $p({\bf x})$,
+\beq
+    p(\Delta {\bf x}_0) \propto \exp( -{1\over 2} \Delta {\bf x}_0 \sigmaxx  \Delta {\bf x}_0),
+    \quad \Delta{\bf x}_0 = {\bf x}-{\bf x}_0.
+\eeq
+The probability of a deviation $\Delta {\bf x}_t$ from the point ${\bf x}_t$ is easily derived 
+from the displacement $\Delta{\bf x}_0$ seen from the origin ${\bf x}_0$,
+\beq
+    \Delta {\bf x}_0 = {\sf I} \; \Delta {\bf x}_t + ({\bf x}_t-{\bf x}_0), \label{eq:translation}
+\eeq
+with ${\sf I}$ the notation for the identity matrix.
+Then, the probability $p(\Delta {\bf x}_t)$ to find such a displacement $\Delta{\bf x}_t$ simply is
+\beq
+    p(\Delta {\bf x}_t) \sim {\cal N}({\bf x}_0-{\bf x}_t,\mathsf{\Sigma}_{xx}).
+    \label{eq:R3prior}
+\eeq
+Eqn.~(\ref{eq:R3prior}) can be interpreted in a particular way:
+Changing the view point from ${\bf x}_0$ to ${\bf x}_t$ from which we consider the deviation $\Delta {\bf x}_t$,
+preserves the Mahalanobis metric $\sigmaxx$. The Mahalanobis metric can be thought as being attached to all points of
+the $\real^3$ space. A change of the origin in this space will keep the metric unaltered.
+
+Next we address the pose prior $p(f)$ which is defined over the $SE(3)$ manifold. The probability to find
+$f$ is given by $p(\ln f_0^{-1}\cdot f)$ the probability measure in the euclidian tangent space $T_1SE(3)$
+with local Mahalanobis  metric $\sigmaff$.
+
+Analogously, we consider a small right deviations $\Delta f_t$
+\beq
+    \Delta f_t = ({\sf R}(\delta\bfomega_f),\delta {\bf T}_f), \quad
+    \ln \Delta f_t = [\delta\bfomega_f,\delta{\bf T}_f]\rightarrow 0, \label{eq:smalldevlimit}
+\eeq
+from the new view point $f_t$. The prior probability to find such a deviation is
+\beq
+    p(\Delta f_t) = p(\ln g \cdot \Delta f_t),\quad
+    g=f_0^{-1}\cdot f_t = ({\sf R}(\bfomega_g),{\bf T}_g).
+    \label{eq:SE3prior}
+\eeq
+In general, $g$ will not be close to identity!
+
+We note, that $\ln g = [\bfomega_g,{\bf t}_g]$  can be interpreted as the geodesic
+to reach the point $f_t$ from $f_0$. Rigorously, $\ln g \in T_1SE(3)$ represents the tangent vector at identity.
+In the small deviation limit (\ref{eq:smalldevlimit}) $\ln g\cdot\Delta f_t = [\bfomega_{\rm id}, {\bf t}_{\rm id}] $
+can be linearized with,
+\beq
+    \left[ \begin{array}{c}
+        \bfomega_{\rm id} \\
+        {\bf t}_{\rm id} 
+    \end{array} \right] = 
+    \underbrace{
+    \left( \begin{array}{lr}
+        \Jom(\bfomega_g) & \\
+        {\sf J}_t(\bfomega_g,{\bf t}_g) & \Jom(\bfomega_g)
+    \end{array} \right)}_{\Jg}\;
+    \left[ \begin{array}{c}
+        \delta\bfomega_f \\
+        \delta {\bf T}_f 
+    \end{array} \right] + 
+    \left[ \begin{array}{c}
+        \bfomega_g \\
+        {\bf t}_g 
+    \end{array} \right].
+    \label{eq:SE3weinorman}
+\eeq
+Eqn.~(\ref{eq:SE3weinorman}) should be seen in direct analogy to (\ref{eq:translation}).
+For small $[\bfomega_g,{\bf t}_g]$, the Jacobien $\Jg$ will be close to the identity matrix, then Eqn.~(\ref{eq:SE3weinorman})
+simplifies to a simple vector translation formula (\ref{eq:translation}).
+More details about the Wei-Normann Jacobian $[\Jg]_{6\times 6}$ can be found in the Appendix \ref{app:weinorman}.  
+
+Then, the probability to find a right deviation $\Delta f_t$ from the camera pose $f_t$ can be shown to be
+\beq
+   p( \Delta f_t ) \sim {\cal N}( f_t^{-1} \cdot f_0, {\Jg}^{-T} \Sigma_{ff_r} {\Jg}^{-1} ).
+\eeq
+In summary, the intrinsic structure of the $SE(3)$ manifold induces a special vector translation formula (\ref{eq:SE3weinorman}).
+A change in the view point $f_0 \rightarrow f_t$ effectively mediates a change in the Mahalanobis metric,
+$\sigmaff \rightarrow  {\Jg}^{T} \sigmaff {\Jg}$. This is in contrast to the constant metric case (\ref{eq:R3prior}).
+
+\subsubsection{information matrix update:}
+
+The goal is to obtain a MAP estimate to (\ref{eq:simpleBayes}). Our approach for finding optimal model parameters
+in the case of a non-linear observation functions is similar to IEKF methods. However, we mainly use inverse covariance matrices
+for the update equations. Linearizing the observation function
+(\ref{eq:likelihood}) at $f_t\star {\bf x}_t$ and the prior at $g = f_0^{-1}\cdot f_t$ with the tangent vector ${\bf g} = \ln g$,
+results in the following central matrix equation to update jointly the camera pose $f_t$ and 3D landmark ${\bf x}_t$,
+\beq
+   \left( \prior + \meas \right)
+     \left[
+    \begin{array}{c}
+        \Delta {\bf f}_t \\
+        \Delta {\bf x}_t
+    \end{array} \right] = 
+    {\sf J}_{\rm obs}
+    \Delta {\bf z}_t -
+    \prior
+    \left[ \begin{array}{c}
+        \Jg^{-1} {\bf g} \\
+        {\bf x}_t-{\bf x}_0
+    \end{array} \right] \label{eq:NLminimization}
+\eeq
+where we use the following notation for the prior and measurement information matrix
+\beq\label{eq:NLnotation1}
+\begin{split}
+   \prior =
+    \left(
+        \begin{array}{cc}
+        \Jg^T \sigmaff \Jg & \\
+        & \sigmaxx
+    \end{array} \right), \\
+    \meas =
+    \left(
+      \begin{array}{rr}
+        \JMJ(f_t,{\bf x}_t) & \JM(f_t,{\bf x}_t) \\
+        \MJ(f_t,{\bf x}_t) & {\sf M}(f_t,{\bf x}_t) \\
+        \end{array} \right) \, .
+\end{split}
+\eeq
+Definitions for ${\sf J}_{\rm obs}$ and the entries of the measurement information matrix $\meas$
+are given in the Appendix \ref{app:updatedefs}. The camera pose and 3D landmark estimates are updated with,
+\beq
+    {\bf x}_{t+1}={\bf x}_t + \Delta {\bf x}_t,\quad f_{t+1} = f_t \cdot\exp(\Delta {\bf f}_t). \label{eq:update}
+\eeq
+With the new estimates we resume linearization at $[f_{t+1},{\bf x}_{t+1}]$ then solving (\ref{eq:NLminimization})
+till sufficient convergence is reached. Eqns.~(\ref{eq:NLminimization},\ref{eq:update}) represent the implementation of the Gauss-Newton
+iterateration for the joint estimates of camera pose and 3D landmark with priors.
+
+In general, the measurement matrix $\meas$ is rank deficienct. Then, solving for (\ref{eq:NLminimization}) has to done carefully.
+Frequently, the pseudo inverse \cite{Atkinson96} is used to avoid problems with soft modes. Also trust-region algorithms such as
+traditional Levenberg-Marquardt or gauge-invariant version thereof \cite{bartoli-towards} are applied to improve the convergence rate.
+Those modes are a manifestation of the degeneracies (ambiguities) in the inference process. The use of a prior can eliminate
+unwanted ambiguities. 
+
+\subsection{Multiple cameras and landmarks (bundle adjustment)}
+
+The update equation (\ref{eq:NLminimization}) generalizes to the case with multiple
+camera views and a set of 3D landmarks, $\{f^i,{\bf x}^j\}$. We denote the connection matrix ${\sf c}^{i,j}$,
+\beq
+    {\sf c}^{i,j} = \left\{ 
+    \begin{array}{rl}
+        1, & \mbox{if landmark $j$ is seen in camera $i$} \\
+        0, & \mbox{otherwise.}
+    \end{array} \right.
+\eeq
+Bundle adjustment solves for a set of $m$ camera poses and $n$ 3D landmark position simultaneously.
+It consists of (non-linear) minimization of the likelihood function
+\beq
+    -\ln L({\bf z}^{i,j}|\{f^i,{\bf x}^j\}) \; \propto \; \sum_{i=1}^{m} \sum_{j=1}^{n} {\sf c}^{i,j}\,|\underbrace{{\bf z}^{i,j} - \pi(f^i\star{\bf x}^j)}_{\Delta {\bf z}^{i,j}}|^2\; .
+    \label{eq:bundlelikelihood}
+\eeq
+Initialization $[{\bf f}_0^i,{\bf x}_0^j]$ is a critical issue to ensure convergence towards the global minimum. It is mostly done from the results obtained by F-matrix methods.
+\begin{figure}
+    \centering
+    \includegraphics[width=6cm]{\getname{bundle}}
+    \caption{The moralized graph for a bundle adjustment with 2 free cameras and 3 landmarks. Camera $f^1$ fixes
+    the world-frame and is not updated in the minimization step.} 
+    \label{fig:bundlemoral}
+\end{figure}
+Generally, the measurement matrix is highly structured and sparse. As an example, the matrix to
+Fig.~\ref{fig:bundlemoral} can be found in the appendix. The sparseness can be exploited
+to find the solution to (\ref{eq:bundlelikelihood}) computationally efficient, \cite{triggs-bundle}.
+However, the use of
+a first order approximation (\ref{eq:NLminimization}) limits greatly the convergence radius,
+since the observation function (\ref{eq:bundlelikelihood}) is essentially non-convex.
+
+\subsubsection{Ambiguities}
+The likelihood function (\ref{eq:bundlelikelihood}) can be shown to have various continouus softmodes.
+The obvious ones are the {\em anchor} and {\em scale} softmode. The former one arises because of the
+interdependence between observer and observation. Without prior information, there is no predefined orientation
+nor origin. We can arbitrarily choose the first camera as an anchor to set the reference frame. 
+The {\em scale} softmode is solely due to the projective nature of the observation function $\pi$.
+We cannot infer the the absolute distance scale between 3D landmarks and camera from observations alone,
+therefore the following transformation leaves the likelihood function (\ref{eq:bundlelikelihood}) unalterd
+\beq
+    {\bf x}\rightarrow {\bf x}' = s \, {\bf x}, \quad
+    f=({\bf R}_f,{\bf T}_f) \rightarrow f'=({\bf R}_f, s\, {\bf T}_f),
+    \label{eq:scalesoftmode}
+\eeq
+for $s>0$ the scale factor.
+\subsubsection{Hardcoded constraints, Master-Slave cameras}
+Frequently, a stereo camera rig is used in robotic applications. 
+The relative camera pose $\Delta_{\rm ms}$ between the stereo cameras
+is well known and independent inference of their poses should not be attempted. The Bayesian inference
+process is easily adaptable to this case using a master and slave camera concept.
+We simply make the slave camera pose algebraically dependent on a master camera:
+\beq
+    f_{\rm slave} =\Delta_{\rm ms} \cdot f_{\rm master}, \quad
+    {\partial f_{\rm slave}\star {\bf x} \over \partial \delta_r f} = {\sf R}_{f_{\rm slave}} \,
+    {\sf J_\times}({\bf x}),
+\eeq
+a right deviation in the master camera $f_{\rm master}\rightarrow f_{\rm master}\cdot\delta_rf$,
+leads to a dependent change in the transformation into the slave camera.
+
+The scale softmode (\ref{eq:scalesoftmode}) can be eliminated with the use of a well
+calibrated stereo camera rig. The distance between both cameras serves as a yardstick to
+fix the distance scale $s$.
+
+\subsection{The marginalized MAP estimator, marginalization over 3D environment}
+As discussed in the previous chapter, the joint MAP estimate of $n$ camera poses and $m$ 3D
+landmarks leads to a algebraically coupled system with the measurement matrix $\meas$
+of dimensions $(6n+3m)^2$. Successive observations can lead to a large number of landmarks,
+therefore the storage requirements and the numerical inversion of a large matrix
+become computationally unpractical. 
+
+However, the product rule
+\beq
+    p(f,\{ {\bf x} \}| {\bf z}) = p(f | {\bf z}) \, \prod_j  p({\bf x}^j| f, {\bf z})
+    \label{eq:productrule}
+\eeq
+facilitates an easier way to find the MAP estimate to (\ref{eq:productrule}) using a two step scheme 
+{\em Step 1}, estimate the optimal 3D landmarks ${\bf x}_{\rm opt}$ given the observation
+and camera pose, then we use the saddle point method to marginalize over the 3D environment
+\beq
+    p(f | {\bf z}) =\prod_j \int \, p(f,{\bf x}_{\rm opt}^j| {\bf z}) \, d{\bf x}^j_{\rm opt}.
+    \label{eq:marginalize}
+\eeq
+{\em Step 2}, we apply the Gauss-Newton method to find the optimal
+camera pose, thus reducing the dimensions of the algebraic system (\ref{eq:NLminimization})
+to $6n$ dimensions. Subsequent iteration of the two-step scheme yields the desired MAP estimate.
+
+This two-step scheme is computational efficient, finding the optimal landmarks ${\bf x}_{\rm opt}$
+is linear in $m$, as well is the marginalization step. 
+
+\section{Experimental Results}
+
+We have tested the mariginalized MAP algorithm for various real natural environment scenarios and compared it against the
+bundle adjustment technique. Fig.~\ref{fig:matchedpoints} shows an example for two matched images. We found that convergence performance of the bundle adjustment procedure (joint estimate of pose and 3D landmarks) versus the marginalized MAP algorithm is roughly similar in cases where the initialization for bundle-adjustment procedure is within the basin of attraction, see Fig.~\ref{fig:matchedpoints}. We note that generally 10 iteration steps are sufficient for convergence.
+\begin{figure}
+    \centering
+    \includegraphics[width=5.5cm]{\getname{realimage}}
+    \caption{Experiments were conducted for typical natural terrain scenarios. Firstly, feature points are defined
+    using image operations. Matching of features in a sequence of images is achieved in a second step. Here,
+    matches are represented as yellow lines. Mismatches will produce gross outliers, as well as smaller variations
+    in feature point localization impose some measurement noise.}
+    \label{fig:matchedpoints}
+\end{figure}
+However, the region of convergence is considerable larger for the marginalized MAP algorithm since the non-convexity of
+the cost-function in the likelihood term is adequately dealt with. Secondly, the joined estimate of camera pose and 3D landmarks requires operations on large matrices (here 68 landmarks and 6 DOF for camera requires a $210 \times 210$ matrix),
+whereas the largest matrix in the marginalized MAP algorithm is $6\times 6$.
+\begin{figure}
+    \centering
+    \includegraphics[width=4.2cm]{\getname{costplot1}}
+    \includegraphics[width=4.2cm]{\getname{costplot2}}
+    \caption{Performance of bundle-adjustment versus marginalized MAP estimator. The logarithmic likelihood is plotted on a log scale versus iteration steps. Bundle-adjustment (blue solid lines) performs slightly better than the marginalized MAP algorithm in the case when bundle-adjustment converges, see left hand figure. However, the convergence radius for bundle-adjustment is rather small due to the non-convexity of the cost function. Here, the marginalized MAP
+overcomes this problem and converges rapidly, see right hand figure.}
+    \label{fig:performance}
+\end{figure}
+
+Gaussian noise is imposed on the feature point observations in order to study the camera pose estimate distribution.
+Fig.~\ref{fig:bayesnoise} shows the discrete point sample distribution for the camera pose estimates obtained by the
+marginalized MAP algorithm. This sample distribution should be seen in direct contrast to the estimate distribution
+ obtained by F-matrix methods, see Fig.~\ref{fig:LMedSq}.
+\begin{figure}
+    \centering
+    \includegraphics[width=4.2cm]{\getname{Bayesomega05}}
+    \includegraphics[width=4.2cm]{\getname{Bayestexp05}}
+    \caption{Discrete point sample distribution of camera pose estimates in exponential coordinates for rotation (left)
+      and translation (right) from matched data points, seen in Fig.~\ref{fig:matchedpoints} corrupted with gaussian noise
+      with $\sigma = 0.8\%$ of image dimensions. This depiction should be seen in contrast to Fig.~\ref{fig:LMedSq}}
+    \label{fig:bayesnoise}
+\end{figure}
+
+\section{Conclusion}
+We have presented a theoretical and numerically implementable framework for uncertainty distributions over the angle and translational space based on the notion of the $SE(3)$ Lie group. Our numerical experiments hint that the probability
+distributions in exponential coordinates have significant gaussian characteristics which makes it possible to use KF techniques for parameter estimation.
+
+Further, on the application side we have introduced a novel 2 step estimation technique, the marginalized MAP estimator, which is numerically more stable and computationally much more efficient than bundle-adjustment, the traditional technique for camera pose estimation from images. Future work will focus on a recursive estimation scheme as well as proper outlier-detection based on MAPSAC.
+
+\begin{appendix}
+\section{SE(3) Matrix group}
+\label{app:SE3group}
+A group element $g\in SE(3)$ can be represented by a real valued $4\times 4$ matrix
+\beq
+    g \cong ({\sf R}(\bfOmega_g),{\bf T}_g) \equiv \left(
+    \begin{array}{cc}
+        {\sf R}(\bfOmega_g) & {\bf T}_g \\
+        0\; 0\; 0 & 1
+    \end{array} \right) \label{eq:SE3matrixrepresentation}
+\eeq
+and group operation is endowed as usual by matrix multiplication.
+\subsection{Exponential and logarithmic map}
+\label{app:expmap}
+Any matrix of the structure (\ref{eq:SE3matrixrepresentation}) can be obtained
+by the exponential map
+\beq
+    \exp: \real^6 \rightarrow SE(3),\;
+    [\bfOmega_g, {\bf t}_g]_{L_1} \rightarrow
+    \exp( \hat{\bf H}\cdot\bfOmega_g + \hat{\bf T}\cdot{\bf t}_g ) = g,
+    \label{eq:exponentialmap}
+\eeq
+where the coordinates $[\bfOmega_g,{\bf t}_g]_{L_1} \in \real^6$ are called the
+{\em Lie-Cartan coordinates of the first kind}. We usually will omit the notation subscript
+$L_1$ when dealing with those {\em exponential} coordinates. The exponential map is globally well defined,
+and can be depicted geometrically as the path connecting the identity element $1\in SE(3)$ with
+$g$. In (\ref{eq:exponentialmap}), the basis elements
+of the 6-dimensional vector space $\real^6\cong T_1SE(3)$ are compactly denoted as,
+\beq
+    \hat{\bf H}\cdot\bfomega={\sf H}_x\Omega_x+{\sf H}_y\Omega_y+{\sf H}_z\Omega_z,\quad
+    \hat{\bf T}\cdot{\bf t} ={\sf T}_x t_x + {\sf T}_y t_y + {\sf T}_z t_z,
+    \label{eq:generatingmatrices}
+\eeq
+where each element of $\hat{\bf H}$ and $\hat{\bf T}$ are real $4\times 4$ matrices,
+also called the generators of the $SE(3)$ group. In conjunction with the Lie-product
+({\em commutator}), $[{\sf A},{\sf B}]_c = {\sf AB}-{\sf BA}$ \footnote{the square bracket
+notation is frequently used without the subscript $c$, we use it here because we already
+defined $[{\bfomega},{\bf v}]$ as the concatation of 2 vectors.},
+the vector space becomes the $se(3)$ Lie algebra,
+\beq
+    [{\sf H}_i,{\sf H}_j]_c = \varepsilon_{ijk}{\sf H}_k,\;
+    [{\sf H}_i,{\sf T}_j]_c = \varepsilon_{ijk}{\sf T}_k,\;
+    [{\sf T}_i, {\sf T}_j]_c = 0. \label{eq:commutatortable}
+\eeq
+The commutator can be seen as the adjoint operator,
+\beq
+    \adj{\sf A} {\sf B} = [{\sf A},{\sf B}]_c, \;\;
+    \adj{\sf A}^k({\sf B}) = [{\sf A},\ldots,[{\sf A},[{\sf A},{\sf B}]_c]_c,
+    \label{eq:defadjoint}
+\eeq
+which gives a powerful notation to represent $k$ interlocked commutators
+as shown in (\ref{eq:defadjoint}).
+
+Frequently, we will have to deal with a factorized representation of (\ref{eq:exponentialmap})
+\begin{multline}
+    ( {\sf R}_z(\phi){\sf R}_y(\vartheta){\sf R}_z(\psi),{\bf T}) = \exp( \hat{\bf T}\cdot {\bf T} ) \\
+    \exp( {\sf H}_z\phi)\exp( {\sf H}_y\vartheta)\exp( {\sf H}_z\psi),
+    \label{eq:Lie2ndkind}
+\end{multline}
+where $({\bf T},\phi,\vartheta,\psi)_{L_2}$ are called {\em canonical coordinates of second kind}
+\footnote{the ordering of the exponential factors is important, hence there are multiple sets
+of coordinates, i~.e.~ Euler ZYZ, XYZ$\ldots$}.
+Due to the non-trivial algebra structure (\ref{eq:commutatortable}) the connection between first
+and second kind coordinates is not a simple one.
+However, we can give a simple commutation rule for the following case
+\beq
+    \exp(\hat{\bf T}\cdot{\bf T})\exp(\hat{\bf H}\cdot\bfOmega) =
+    \exp(\hat{\bf H}\cdot\bfOmega)\exp(\hat{\bf T}\cdot{\sf R}^{-1}(\bfOmega){\bf T}),
+    \label{eq:TOmegacommute}
+\eeq
+which can be derived from the general conjugation rule
+\beq
+    g^{-1}\,\exp(\hat{\bf H}\cdot\bfOmega+\hat{\bf T}\cdot{\bf T})\, g =
+    \exp(g^{-1}\; (\hat{\bf H}\cdot\bfOmega+\hat{\bf T}\cdot{\bf T})\; g) \label{eq:conjugation}
+\eeq
+where $g$ in the exponent of (\ref{eq:conjugation}) is interpreted as a 4x4 matrix, according to
+(\ref{eq:SE3matrixrepresentation}).
+
+In particular, for the exponential map (\ref{eq:exponentialmap}) we can give the following
+Eqns.~
+\beqar
+    {\sf R}(\bfOmega) &=& {\sf I}+\sin\Theta {\sf H} + (1-\cos\Theta){\sf H}^2,
+    \quad \label{eq:rodrigues} \\
+    {\bf T} &=& {\sf S}(\bfOmega)\; {\bf t},\quad
+    {\sf S}(\bfOmega) = {\sf I} + {\sf H}^2 +  {1\over\Theta}({\sf I}-{\sf R}){\sf H}, \nonumber
+\eeqar
+where we use the notation
+\beq
+    \Theta=|\bfOmega|,\; {\bf r} = \bfOmega/\Theta,\quad
+    {\sf H}=\hat{\bf H}\cdot{\bf r}. \label{eq:expnotation}
+\eeq
+As seen from the Rodrigues formula (\ref{eq:rodrigues}), ${\sf R}(\bfomega)$ is $2\pi$-periodic in $\Theta$.
+This implies that a change in the normal vector direction can be compensated by a $2\pi$ offset, $({\bf r},\Theta) \cong (-{\bf r},2\pi-\Theta)$. Hence, $\bfomega$ uniquely specifies a rotation only when it is restricted within a sphere of radius $\pi$. Penetrating the skin of this sphere causes {\em phase reflection} and constitutes some difficulty in the inversion process, see below. This fact is also well known as double connectedness,
+$SO(3) \cong S^3/Z_2$, where opposite points on the skin of the sphere are identical with each other,
+$({\bf r},\pi) \equiv (-{\bf r},\pi)$.
+
+The inverse function to the exponential map is the logarithmic map
+\beq
+    \ln: SE(3)\rightarrow\real^6,\; ({\sf R}(\bfOmega),{\bf T})\rightarrow [\bfOmega,{\bf t}]_{L_1},
+    \label{eq:logarithmicmap}
+\eeq
+which is well defined for $\Theta<\pi$. As discussed above, the logarithmic map will not be
+unique at the phase reflection boundary, $\Theta = \pi$. The existance of such boundary will have
+implications for the topics considered in the following sections.
+
+\subsection{Baker-Campbell-Hausdorff formula, {\em adding} two finite rotations}
+Frequently, we obtain a factorized rotation representation,
+\beq
+    \exp( \Theta_c {\sf H}_c ) = \exp(\Theta_a {\sf H}_a)\exp(\Theta_b{\sf H}_b),
+    \label{eq:expproduct}
+\eeq
+presented with notation (\ref{eq:expnotation}). An exponential series expansion of the right hand side of
+(\ref{eq:expproduct}) is ordered with ${\sf H}_a$ to the left and ${\sf H}_b$ to the right. It is clear
+that a simple sum ${\sf H}_c \neq {\sf H}_a + {\sf H}_b$ cannot hold because its exponential series expansion is unordered. The Baker-Campbell-Hausdorff (BCH) formula\footnote{the BCH formula can be derived using
+the derivative of exponentials, the resulting integral with function $h(x)=\ln(x)/(x-1)$ is understood as a power series expansion in $x$.} is useful to derive an {\em additive} relationship,
+\beqar
+    \Theta_c {\sf H}_c &=& \Theta_b {\sf H}_b + \int_0^{\Theta_a} h\left(
+    e^{s \, \adj{{\sf H}_a}} e^{ \Theta_b \, \adj{{\sf H}_b}}
+    \right) \, {\sf H}_a \; ds, \nonumber \\
+    &=& \Theta_a {\sf H}_a + \Theta_b {\sf H}_b + {1\over 2}\Theta_a\Theta_b
+    [{\sf H}_a,{\sf H}_b]+
+    \ldots\; . \label{eq:BCH}
+\eeqar
+However, (\ref{eq:BCH}) only hands an infinite series expansion. It is quite useful to have a closed expression for the Rodrigues vector $\bfOmega_c$ of the resulting rotation ${\sf R}_c = \exp( \hat{\bf H}\cdot\bfOmega_c )$. We could compactly denote this operation as $\bfOmega_c = \ln {\sf R}_a{\sf R}_b\,$. One can show, i.~e. by using a quaternion representation
+\cite{myself}, that the following Eqn.~holds,
+\begin{multline}
+    \bfOmega_c = {\Theta_c\over C}\left(
+    a \, {\bf r}_a + b \, {\bf r}_b + ab \, {\bf r}_a\times{\bf r}_b \right), \\
+    a =\tan{\Theta_a\over 2},\, b=\tan{\Theta_b\over 2}
+    \label{eq:addSO3finite}.
+\end{multline}
+The normalizing factor, $C = \sqrt{A - \varepsilon^2}$, can be given as
+\beq
+    A = 1+a^2+b^2+a^2b^2,\;\; \varepsilon = (1-ab\cos\vartheta),\quad
+    \cos\vartheta = {\bf r}_a\cdot{\bf r}_b\;, \label{eq:normfactor}
+\eeq
+and the norm $\Theta_c$ 
+\beq
+    \tan{\Theta_c\over 2} = C / \, \varepsilon\;.
+\eeq
+For the trivial case, $\cos\vartheta=\pm1$ in (\ref{eq:normfactor}), we simply obtain
+$\bfOmega_c=\bfOmega_a+\bfOmega_b$.
+To evaluate the prefactor $\Theta_c/C$ in (\ref{eq:addSO3finite}) or the primed versions
+below, we have to pay attention to the following two limit cases:
+\begin{enumerate}
+\item limit $\varepsilon \rightarrow 0$, (this implies $A \geq 1$)
+\beq
+    {\Theta_c\over C} = {\pi \over \sqrt{A}}\, [ 1 - {2\over\pi}\,{\varepsilon\over\sqrt{A}} + {1\over 2}\,
+    \left({\varepsilon\over \sqrt{A}}\right)^2 \; + \;
+    {\cal O}((\varepsilon/\sqrt{A})^3) \; ]
+\eeq
+\item limit $C\rightarrow 0$, (this implies $\varepsilon^2\geq 1$)
+\beq
+    {\Theta_c\over C} = {2\over \varepsilon}\, [1 - {1\over 3}\,\left({C\over\varepsilon}\right)^2 \; + \;
+    {\cal O}((C/\varepsilon)^4) \; ]\; .
+\eeq
+\end{enumerate}
+\subsubsection{phase reflection $\Theta=\pi$}
+Since the logarithmic map loses its uniqueness at $\Theta=\pi$, we have to be careful to define the
+vector addition (\ref{eq:addSO3finite}). Firstly, we consider
+$\Theta_a \rightarrow \pi-$ which implies $a\rightarrow \infty$ and $b$ finite.
+Secondly a similar statement accounts for the limit $a\rightarrow\infty$ and $b\rightarrow\infty$.
+We notice that those two limits, (i) and (ii), can be treated consistently
+In both cases a cutline at $\cos\vartheta=0$ has to be made to account for the phase
+reflection boundary. The limit process $\Theta_a \rightarrow \pi-$ can be depicted graphically,
+see Fig.~\ref{fig:pwrap}.
+\begin{figure}
+    \centering
+    \includegraphics[width=6cm]{\getname{phasewrap}}
+    \caption{phase reflection occurs for $|\bfOmega_a| = \pi$. The result of {\em adding} another
+    infinitesimal vector ${\bfomega}_b$ depends whether
+    it has the same direction $\cos\vartheta>0$, which will give a resulting
+    vector in the direction $-\bfOmega_a$. If $\cos\vartheta<0$, the resulting vector will be
+    unchanged.}
+    \label{fig:pwrap}
+\end{figure}
+Hence, all quantities are properly defined in the limits. Therefore, Eqn.~(\ref{eq:addSO3finite}) can
+be used to {\em add} finite Rodrigues vectors without employing intermittant rotation matrices or quaternions!
+
+\subsubsection{adding two infinitesimal rotations, kinematics of rigid bodies}
+The rate of change, {\em angular velocity}, of $\bfOmega$ for an infinitesimal small quantity $dt\rightarrow 0$
+is $d\bfOmega = dt\, \bfomega$. We can apply the finite {\em addition} formula (\ref{eq:addSO3finite}) or
+directly apply the BCH expansion (\ref{eq:BCH}) to obtain,
+\beq
+    d\bfOmega_c = dt\, \bfomega_c = dt\, \bfomega_a + dt\, \bfomega_b + {1\over 2} dt^2\, \bfomega_a\times\bfomega_b\;.
+    \label{eq:addSO3inf}
+\eeq
+As such we recover in (\ref{eq:addSO3inf}) the well known fact that angular velocities $\bfomega$
+constitutes an algebraic vectors space with the normal commutative addition. More exactly, the
+vector space is known as $T_1SO(3)$.
+
+\subsection{Wei-Norman formula, derivative of exponentials, {\em adding} finite to infinitesimal rotation}
+\label{app:weinorman}
+Again, we consider the rotation product expression in (\ref{eq:expproduct}). This time we
+like to describe the infinitesimal environment at $\bfOmega_c = \bfOmega_a + \Delta\bfomega$
+for a finite left rotation $\bfOmega_a$ in dependence of an infinitesimal right rotation $\bfOmega_b \rightarrow \bf 0$.
+Then we have to analyze the following directional derivative
+\beq
+    {d\over ds}\;\exp(\hat{\bf H}\cdot\bfOmega_a + s\;\hat{\bf H}\cdot\Delta\bfomega)
+    \; = \; \exp(\hat{\bf H}\cdot\bfOmega_a) \hat{\bf H}\cdot{\sf J}_{\omega_r}^{-1}(\bfOmega_a)
+    \Delta\bfomega,
+    \label{eq:directionalderiv}
+\eeq
+where the right composition Jacobian ${\sf J}_{\omega_r}(\bfOmega_a) \in \real^{3\times3}: 
+T_{{\sf R}(\bfOmega_a)}SO(3)\rightarrow T_1SO(3)$ describes the
+mapping from the tangent space at at ${\sf R}(\bfOmega_a)$ to the one at identity.
+In order to evaluate the left hand side of (\ref{eq:directionalderiv}), it is advantagous to
+consider a "matrix" equation for $g\in SE(3)$ and general ${\sf A},{\sf B}\in se(3)$
+\beq
+    {\partial \over \partial t}g(t,s) = ({\sf A} + s{\sf B})g(s,t)\; \rightarrow \;
+    g(s,t) = e^{t ({\sf A}+s{\sf B})}. \label{eq:SE3diff}
+\eeq
+With the help of the Dyson ordering operator ${\cal T}$ 
+and the adjoint notation (\ref{eq:defadjoint}), it can be shown that the following holds
+\beq
+    g(s,t) = e^{t {\sf A}} \; {\cal T}\exp\left( s\,
+    \int_0^t e^{-u\, \adj{\sf A}} \, du \; {\sf B} \right ) \; .
+    \label{eq:timeordering}
+\eeq
+Differentiating (\ref{eq:timeordering}) with respect to $s$, setting $t=1$,
+then applying it to (\ref{eq:directionalderiv}) yields
+\beq
+    u(\Theta_a\, \adj{{\sf H}_a} )
+    \hat{\bf H}\cdot\Delta\bfomega = \hat{\bf H}\cdot {\sf J}_{\omega_r}^{-1}(\bfOmega_a)
+    \Delta\bfomega. \quad u(x)=\int_0^1 e^{-s x} \; ds
+    \label{eq:weinorman}
+\eeq
+a relationship to obtain ${\sf J}_{\omega_r}(\bfOmega_a)$. In fact (\ref{eq:weinorman}) constitutes a
+Wei-Norman formula \cite{Wei-Norman}, which relates the differential changes of a product of
+exponentials (\ref{eq:expproduct}) to the changes of one resulting exponential. However, it is not easy
+to obtain a closed form expression from (\ref{eq:weinorman}). It shall be noticed that with Eq.~(\ref{eq:addSO3finite})
+we directly obtain the right Rodrigues Jacobian ${\sf J}_{\omega_r}(\bfOmega_a)$ by,
+\beq
+    {\sf J}_{\omega_r}(\bfOmega_a) = 
+    \left.{\partial \bfOmega_c \over \partial \bfOmega_b}\right|_{\Theta_b=0}=
+    \left.{\partial \bfOmega_c \over \partial \Theta_b}\right|_{\Theta_b=0} {\bf r}_b+
+    \left.{\partial \bfOmega_c \over \partial {\bf r}_b} {\partial {\bf r}_b \over \partial \bfOmega_b}
+    \right|_{\Theta_b=0}. \label{eq:jacobianomega1}
+\eeq
+Further, Eq.~(\ref{eq:jacobianomega1}) can be evaluated as,
+\beq
+    {\sf J}_{\omega_r}(\bfOmega_a) = (1-x)\, {\sf I}+ x\, {\bf r}_a{\bf r}_a^T + {1\over 2}[\bfOmega_a]_\times,
+    \; 1-x = {\Theta_a\over 2}\tan^{-1}{\Theta_a\over 2}.
+    \label{eq:RodweinormanJ}
+\eeq
+Similarly, we could leave $\bfOmega_b$ in the product expansion (\ref{eq:expproduct}) at a finite value
+and consider infinitesimal left variations of $\bfOmega_a\rightarrow {\bf 0}$. This naturally leads to the
+complementary left Rodrigues Jacobian
+\beq
+    {\sf J}_{\omega_l} (\bfOmega_b) = (1-y)\, {\sf I}+ y\, {\bf r}_b{\bf r}_b^T - {1\over 2}[\bfOmega_b]_\times,
+    \; 1-y = {\Theta_b\over 2}\tan^{-1}{\Theta_b\over 2}.
+\eeq
+It shall be emphazised that the Jacobiens above don't have singularities and are invertible, since all quantities
+are well defined for $\Theta\leq\pi$ and $\mathrm{det}( {\sf J}_{\omega_r}) = (1-x)^2 + \Theta_a^2/4$.
+
+\subsection{Vector {\em addition} formulas over $SE(3)$}
+In close analogy to the previous section, a composition in $SE(3)$ can be analyzed
+in the {\em additive} framework,
+\beq
+    ({\sf R}(\bfOmega_c),{\bf T}_c)=({\sf R}_a,{\bf T}_a)\cdot
+    ({\sf R}_b,{\bf T}_b)\, .
+\eeq
+\subsubsection{{\em adding} finite motions:}
+With definition of this group composition (\ref{eq:groupcomposition}), we can formally write
+\beq
+    \ln \, ({\sf R}(\bfOmega_c),{\bf T}_c) = [\ln {\sf R}_a{\sf R}_b,\;
+    {\sf S}^{-1}(\bfOmega_c) ({\sf R}_a{\bf T}_b + {\bf T}_a) \, ].
+    \label{eq:addfiniteSE3}
+\eeq
+\subsubsection{{\em adding} finite to infinitesimal motion}
+The addition formula (\ref{eq:addfiniteSE3}) can be analyzed in the limit $t\rightarrow 0$ where the right composition is $\ln ({\sf R}_b,{\bf T}_b) = [t \bfomega_b, t {\bf v}_b]$. It is easy to show that the following must hold to order ${\cal O}(t)$,
+\begin{multline}
+    [\bfOmega_c,{\bf t}_c] = [\bfOmega_a,{\bf t}_a] + \\
+    [{\sf J}_{\omega_r}(\bfOmega_a)\bfomega_b,\, 
+    {\sf S}^{-1}(\bfOmega_a){\sf R}(\bfOmega_a){\bf v}_b + {\sf J}_{t_r}(\bfOmega_a,{\bf t}_a)\bfomega_b],
+    \label{eq:SE3vectoraddition}
+\end{multline}
+In (\ref{eq:rodrigues}) we only gave the expression for ${\sf S}$. We can use the
+properties of the finite ${\sf H}$ algebra with its characteristic polynomial ${\sf H}({\sf H}^2+{\sf I})=0$
+to obtain an expression for ${\sf S}^{-1}(\bfOmega_a)$. As an interesting fact, we meet the Rodrigues Jacobians again
+\begin{multline}
+    {\sf S}^{-1}(\bfOmega_a) = (1-x){\sf I} + x\, {\bf r}_a{\bf r}_a^T - {1\over 2}[\bfOmega_a]_\times \\
+    = {\sf J}_{\omega_r}(-\bfOmega_a) = {\sf J}_{\omega_l}(\bfOmega_a)\;.
+\end{multline}
+Further, one can show that
+\beq
+    {\sf S}^{-1}(\bfOmega_a){\sf R}(\bfOmega_a) = {\sf R}(\bfOmega_a){\sf S}^{-1}(\bfOmega_a) =
+    {\sf J}_{\omega_r}(\bfOmega_a),
+\eeq
+A more detailed calculation for the coupling Jacobien ${\sf J}_{t_r}$ yields
+\beq
+    {\sf J}_{t}(\bfOmega_a,{\bf t}_a) = {\partial [{\sf S}^{-1}(\bfOmega_a){\bf T}_a] \over
+    \partial \bfOmega_a} \, {\sf J}_{\omega_r}(\bfOmega_a),\quad {\bf T}_a = {\sf S}(\bfOmega_a) \, {\bf t}_a.
+\eeq
+We can show that
+\beqar
+    {\partial [{\sf S}^{-1}(\bfOmega_a){\bf T}_a] \over
+    \partial \bfOmega_a} & = &
+    {1\over 2}[{\bf t}_a]_\times+ {x\over\Theta_a}
+    \left( {\bf r}_a{\bf t}_a^T- t_a \;{\sf H}^2_a + {\bf t}_a{\bf r}_a^T \right) + \nonumber \\
+    && {t_a\over\Theta_a} ({\sf S}(\bfOmega_a)-{\sf S}^{-1}(-\bfOmega_a)),
+\eeqar
+with $ t_a = {\bf r}_a\cdot{\bf t}_a$, which finishes the discourse on the $SE(3)$ motion group.
+
+\subsection{additive versus composite derivative}
+\label{app:incremental}
+The Rodrigues formula (\ref{eq:rodrigues}) allows differentiation with respect to $\bfOmega$ directly,
+\beq
+    {\sf R}(\bfOmega_0+\Delta\bfomega) \approx 
+    {\sf R}(\bfOmega_0) + \left. {\partial{\sf R}\over \partial\Omega_\mu} \right|_{\bfOmega_0}
+    \Delta\omega_\mu = {\sf R}(\bfOmega_0) ( {\sf I} + [\delta\bfOmega]_\times ).
+    \label{eq:rodriguesder}
+\eeq
+We can call $\partial{\sf R}/ \partial\Omega_\mu$ the additive derivative, whereas 
+$[\delta\bfOmega]_\times = \left.{d\over dt}\right|_{t=0} \exp( t [\delta\bfOmega]_\times )$
+can be termed the compositive ({\em incremental}) derivative.
+
+In accordance with the vector addition over $SO(3)$ (\ref{eq:addSO3finite}), we can show that
+\beq
+     \delta\bfOmega \; = \; {\sf J}^{-1}_{\omega_r}(\bfOmega_0)\, \Delta\bfomega
+    \label{eq:SO3localglobal}
+\eeq
+or explicitly
+\beq
+    \delta{\bfOmega}=
+    {\sin\Theta_0\over\Theta_0} \Delta\bfomega + {1-\cos\Theta_0\over\Theta_0}\; \Delta\bfomega\times{\bf r}_0 +
+    k\,(1-{\sin\Theta_0\over\Theta_0}) \; {\bf r}_0
+    \nonumber
+\eeq
+with $k={\bf r}_0\cdot\Delta\bfomega$ and the usual definition $\Theta_0=|\bfOmega_0|$,
+${\bf r}_0 = \bfOmega_0/\Theta_0$.
+
+\subsection{The $SU(2)/\mathbb{Z}_2 \cong SO(3)$ connection}
+The $SO(3)$ generating algebra ${\sf H}_i$ and the $SU(2)$ one with generators ${\sf u}_i$ have very similar structures,
+meaning there is an isomorphism between the algebras, $\mathfrak{so}(3) \cong \mathfrak{su}(2)$, 
+\beq
+      [{\sf H}_i,{\sf H}_j]_c = \varepsilon_{ijk}{\sf H}_k,\;
+      [{\sf u}_i,{\sf u}_j]_c = 2\varepsilon_{ijk}{\sf u}_k\;. \label{eq:su2-algebra-structure}
+\eeq
+Both, ${\sf H}_0$ and $${\sf u}_0$ are the identity matrices in each of their cases.
+The standard matrix representations are:
+\beq
+   {\sf u}_1 = \begin{pmatrix} 0 & i \\ i & 0 \end{pmatrix}, \; {\sf u}_2 = \begin{pmatrix} 0 & -1 \\ 1 & 0 \end{pmatrix}, \; {\sf u}_3 = \begin{pmatrix} i & 0 \\ 0 & -i \end{pmatrix}
+\eeq
+and for the Lie algebra $\mathfrak{so}(3)$ generators of the $SO(3)$ group
+\begin{IEEEeqnarray*}{c}
+   {\sf H}_1 = \begin{pmatrix} 0 & 0 & 0 \\ 0 & 0 & -1 \\ 0 & 1 & 0 \end{pmatrix},\quad
+   {\sf H}_2 = \begin{pmatrix} 0 & 0 & 1 \\ 0 & 0 & 0 \\ -1 & 0 & 0 \end{pmatrix},\\
+   {\sf H}_3 = \begin{pmatrix} 0 & -1 & 0 \\ 1 & 0 & 0 \\ 0 & 0 & 0 \end{pmatrix}\, .
+\end{IEEEeqnarray*}
+Other representations of $\mathfrak{su}(2)$ are possible and standard in Physics with changing the
+algebra-structure (\ref{eq:su2-algebra-structure}) slightly to $[{\sigma}_i,{\sigma}_j]_c = 2i\varepsilon_{ijk}{\sigma}_k$,
+welcome the Pauli-matrices here:
+\beq
+     \sigma_1 = -i {\sf u}_1\,,\quad \sigma_2 = i {\sf u}_2\,,\quad \sigma_3 = -i {\sf u}_3\, .
+ \eeq
+Regardless of the isomorphic $\mathfrak{su}(2)$ representations, the generated group
+$SU(2)$ is not isomorphic to $SO(3)$, as can be seen from these formulas:
+\beq
+    R() = whatever
+\eeq
+
+\subsection{Definitions in the update formula}
+\label{app:updatedefs}
+\beq
+  {\sf J}_{\rm obs} =
+   \left( \begin{array}{r}
+        {\sf J_\times}^T {\sf R}^T_{f_t} {\sf H}_t^T \mathsf{\Sigma}_{zz}^{-T}\\
+        {\sf R}^T_{f_t} {\sf H}_t^T \mathsf{\Sigma}_{zz}^{-T}
+        \end{array} \right),\\
+\eeq
+\beqar
+    \JMJ(f_t,{\bf x}_t) &=& {\sf J_\times}^T({\bf x}_t) {\sf M}(f_t,{\bf x}_t) {\sf J_\times}({\bf x}_t), \nonumber \\
+    \MJ(f_t,{\bf x}_t) &=& {\sf M}(f_t,{\bf x}_t) {\sf J_\times}({\bf x}_t) = [\JM(f_t,{\bf x}_t)]^T. \nonumber
+\eeqar
+Further we define,
+\beq
+    {\sf M}(f_t,{\bf x}_t) = [{\sf R}_{f_t}^T{\sf H}_t^T \, \sigmazz \, {\sf H}_t {\sf R}_{f_t}]_{3\times 3}\;. \label{eq:NLnotation2}
+\eeq
+
+\subsection{bundle-adjustment matrix}
+The structure of the measurement matrix in the example depicted in Fig.\ref{fig:bundlemoral} for 3 landmarks and 2 cameras
+is $\meas=$
+\beq
+    \begin{array}{r|rr|rrr|}
+        & f^3 & f^2 & {\bf x}^1 & {\bf x}2 & {\bf x}^3 \\
+        \hline
+       f^3 & {\sf c}^{3,j}\JMJ(f^3,{\bf x}^j) & & & \JM(f^3,{\bf x}^2) & \JM(f^3,{\bf x}^3) \\
+       f^2 & & {\sf  c}^{2,j}\JMJ(f^2,{\bf x}^j) & \JM(f^2,{\bf x}^1) & \JM(f^2,{\bf x}^2) & \\
+        \hline
+       {\bf x}^1 &  & \MJ(f^2,{\bf x}^1) & {\sf c}^{i,1}{\sf M}(f^i,{\bf x}^1) & & \\
+       {\bf x}^2 &  \MJ(f^3,{\bf x}^2) & \MJ(f^2,{\bf x}^2) & & {\sf c}^{i,2}{\sf  M}(f^i,{\bf x}^2) & \\
+       {\bf x}^3 & \MJ(f^3,{\bf x}^3) & & & & {\sf c}^{i,3}{\sf M}(f^i,{\bf x}^3) \\
+        \hline
+    \end{array}
+    \;. \nonumber
+\eeq
+
+\end{appendix}
+
+\begin{thebibliography}{99}
+
+\bibitem{chiuso-mfm}
+A.~Chiuso and S.~Soatto
+\newblock MFm: 3-D Motion from 2-D motion causally integrated over time
+%@misc{ chiuso-mfm,
+%  author = "Alessandro Chiuso and Stefano Soatto",
+%  title = "MFm: 3-D Motion From 2-D Motion Causally Integrated Over Time - Part I:
+%    Theory",
+%  url = "citeseer.nj.nec.com/512906.html" }
+
+\bibitem{Kanatani98}
+K. Kanatani and N. Ohta.
+\newblock Optimal robot self-localization and reliability evaluation. 
+\newblock In European Conf. Computer Vision, pages 796Ð808, Freiburg, 1998.
+
+\bibitem{Bootstrapping}
+B. Matei and P. Meer.
+\newblock Bootstrapping a heteroscedastic regression model with application to 3D rigid motion evaluation.
+\newblock In Vision Algorithms: Theory and Practice. Springer-Verlag, 2000. 
+
+\bibitem{BayesianSFM}
+D. A. Forsyth, S. Ioffe, and J. Haddon.
+\newblock Bayesian structure from motion.
+\newblock In Int. Conf. Computer Vision, pages 660Ð665, Corfu, 1999. 
+
+\bibitem{morris-gauge}
+D.~D.~Morris, K.~Kanatani and T.~Kanade.
+\newblock Gauge Fixing for Accurate 3D Estimation.
+\newblock In the Proceedings of CVPR, December 2001.
+
+\bibitem{Atkinson96}
+K.~Atkinson, editor. {\em Close Range Photogrammetry and Machine Vision.}
+\newblock Whittles Publishing, 1996.
+
+\bibitem{bartoli-towards}
+A.~Bartoli,
+\newblock Towards Gauge Invariant Bundle Adjustment: A Solution based on gauge dependent damping.
+\newblock In the Proceedings of ICCV03.
+
+\bibitem{triggs-bundle}
+B.~Triggs, P.~McLauchlan and R.~Hartley and A.~Fitzgibbon,
+\newblock Bundle Adjustment - A Modern Synthesis.
+%@InCollection{,
+%  title = "Bundle Adjustment -- {A} Modern Synthesis",
+%  author = "Bill Triggs and Philip McLauchlan and Richard Hartley and Andrew Fitzgibbon",
+%  booktitle = "Vision Algorithms: Theory and Practice",
+%  editor = "Triggs, W. and Zisserman, A. and Szeliski, R.",
+%  publisher= "Springer Verlag",
+%  series = "LNCS",
+%  pages = {298--375},
+%  year = 2000,
+%  url = {citeseer.nj.nec.com/triggs00bundle.html} }
+
+\bibitem{Kanatani94}
+K.~Kanatani,
+\newblock Analysis of 3-D Rotation Fitting,
+\newblock Transactions of pattern analysis and machine intelligence, IEEE, Vol. 16, no. 5, 1994.
+
+\bibitem{AltmanS}
+S.~L.~Altman,
+\newblock {\em Rotations, Quaternions and Double Groups.}
+Clarendon Press, Oxford, 1986.
+
+\bibitem{MinklerG}
+G.~J.~Minkler,
+\newblock {\em Aerospace Coordinate Systems and Transformations.}
+Magellan Book Company, Balitmore, MD, 1990.
+
+\bibitem{pennec97}
+X.~Pennec and J.~P.~Thirion,
+\newblock {\em A Framework for Uncertainty and Validation of 3-D Registration Methods
+based on Points and Frames},
+\newblock International Journal of Computer Vision, 25(3), pp 203-229, 1997.
+ 
+\bibitem{Horn87}
+B.~K.~P.~ Horn,
+\newblock Closed Form Solutions of Absolute Orientations Using Unit Quaternions,
+\newblock Journal of Optical Society of America, {\bf A-4}(4), pp 629-642, 1987.
+
+\bibitem{Horn88}
+B.~K.~P.~ Horn, H~.M. Hilden and S.~Negahdaripour,
+\newblock Closed Form solution of absolute orientation using orthonormal matrices.
+\newblock Journal of Optical Society of America, {\bf A-5}(7), pp 1127-1135, 1988.
+
+%\bibitem{FaugerasBook}
+%O.~Faugeras,
+%\newblock {\em Three-Dimensional Computer Vision.}
+%MIT Press Cambridge, Massachusetts
+
+\bibitem{JuyangWeng89}
+J.~Weng, T.~S. Huang and N.~ Ahuja,
+\newblock Motion and Structure from Two Perspective Views:
+Algorithms, Error Analysis, and Error Estimation
+\newblock IEEE Trans. on Pattern Analysis and Machine Intelligence, vol. II, No 5, pp 451-475, 1989.
+
+\bibitem{Wei-Norman}
+J.~Wei and E.~Norman,
+\newblock On the global representations of the solutions of linear differential equations
+as a product of exponentials.
+\newblock {\em Proc. of the Amer. Math. Soc.}, {\bf 15}, pp 327-334, 1964.
+
+\end{thebibliography}
+
+\end{document}

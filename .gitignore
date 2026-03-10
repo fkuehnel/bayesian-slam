@@ -1,0 +1,6 @@
+# LaTeX temporary/output files
+*.aux
+*.log
+*.dvi
+
+.DS_Store
