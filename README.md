@@ -125,7 +125,9 @@ cargo run --release --example bias_parametrization
 
 This project builds on:
 
-- **Kuehnel (2008)**: Original technical report at NASA Ames developing the SE(3) Bayesian estimation framework with exponential coordinates, cited as `[kuehnel2008]` in the manuscript
+- **Kuehnel (2004)**: "Bayesian estimation of nonlinear parameters on SE(3) Lie group," *AIP Conf. Proc.* vol. 735, pp. 176–186. [DOI: 10.1063/1.1835212](https://doi.org/10.1063/1.1835212) — First introduction of Lie-Cartan exponential coordinates for unbiased Bayesian pose estimation and the marginalized MAP estimator
+- **Kuehnel (2005)**: "Local frame junction trees in SLAM," *AIP Conf. Proc.* vol. 803, pp. 318–329. [DOI: 10.1063/1.2149810](https://doi.org/10.1063/1.2149810) — Graphical model structure of SLAM via junction trees exploiting local frame dependence
+- **Kuehnel (2008)**: Unpublished technical report at NASA Ames developing the full SE(3) algebra toolkit with BCH composition, Wei-Norman Jacobians, and phase reflection handling, cited as `[kuehnel2008]` in the manuscript
 - **Solà, Deray & Atchuthan (2018)**: "A micro Lie theory for state estimation in robotics" — covers similar SE(3) machinery at first order; our work extends to second order
 - **Ye & Chirikjian (2024)**: "Uncertainty propagation on unimodular Lie groups" — addresses propagation via SDEs; our approach uses the closed-form BCH directly
 - **Barfoot (2024)**: *State Estimation for Robotics* — comprehensive textbook; our coupling Jacobian and saddlepoint marginalization go beyond what is covered there

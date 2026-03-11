@@ -151,6 +151,19 @@ explored non-parametric approaches.
 Bourmaud et al.~\cite{bourmaud2013discrete} proposed a 
 discrete extended Kalman filter on Lie groups.
 
+The present work extends the author's earlier 
+contributions~\cite{kuehnel2004,kuehnel2005,kuehnel2008}.
+In~\cite{kuehnel2004}, the role of Lie-Cartan exponential 
+coordinates for unbiased pose estimation and the 
+marginalized MAP estimator were first introduced in 
+the context of Bayesian inference on $SE(3)$.
+In~\cite{kuehnel2005}, the graphical model structure 
+of the SLAM problem was addressed via local frame 
+junction trees exploiting the frame dependence of 
+observations. The present paper refocuses and extends 
+that foundational work: the second-order propagation 
+formulas and saddlepoint marginalization are new.
+
 Despite this body of work, several gaps remain:
 (i)~closed-form second-order propagation formulas for the 
 full $SE(3)$ group (not just $SO(3)$) are not available 
@@ -377,15 +390,21 @@ rather than the infinite BCH series, yielding:
 \begin{theorem}[Second-order covariance correction]
 \label{thm:covcorrection}
 The covariance of $\ln h$ receives a correction of order 
-$\mathcal{O}(\sigma^4)$ from the curvature of $SE(3)$:
+$\mathcal{O}(\sigma^4)$ from the quadratic nonlinearity 
+of the BCH map on $SE(3)$:
 \beq
     \sfSigma{hh}^{(2)} = \sfSigma{hh}^{(1)} + 
     \Delta\Sigma^{(2)},
 \eeq
 where $\sfSigma{hh}^{(1)}$ is the first-order 
-result~\eqref{eq:firstordercomp} and $\Delta\Sigma^{(2)}$ 
-depends on the fourth central moments of the perturbations 
-and the curvature tensor of $SE(3)$ at the base point.
+result~\eqref{eq:firstordercomp}. The correction 
+$\Delta\Sigma^{(2)}$ is expressed entirely in terms of 
+the covariance blocks $\sfSigma{aa}$, $\sfSigma{bb}$, 
+$\sfSigma{ab}$ of the two perturbations (rotational and 
+translational), weighted by the structure constants 
+$\varepsilon_{ijk}$ and the coupling Jacobian 
+$\mathsf{J}_t$. For Gaussian perturbations, no 
+higher-order moments are needed.
 The explicit form is given in Appendix~\ref{app:secondorder}.
 \end{theorem}
 
@@ -855,7 +874,7 @@ and can be depicted geometrically as the path connecting the identity element $1
 $g$. In (\ref{eq:exponentialmap}), the basis elements
 of the 6-dimensional vector space $\real^6\cong T_1SE(3)$ are compactly denoted as,
 \beq
-    \hat{\bf H}\cdot\bfomega=\mathsf{H}_x\Omega_x+\mathsf{H}_y\Omega_y+\mathsf{H}_z\Omega_z,\;
+    \hat{\bf H}\cdot\bfomega=\mathsf{H}_x\Omega_x+\mathsf{H}_y\Omega_y+\mathsf{H}_z\Omega_z,\quad
     \hat{\bf T}\cdot{\bf t} =\mathsf{T}_x t_x + \mathsf{T}_y t_y + \mathsf{T}_z t_z,
     \label{eq:generatingmatrices}
 \eeq
@@ -1083,7 +1102,7 @@ the following Eqn.\ holds,
 \end{multline}
 The normalizing factor, $C = \sqrt{A - \varepsilon^2}$, can be given as
 \beq
-    A = 1+a^2+b^2+a^2b^2,\;\; \varepsilon = (1-ab\cos\vartheta),\;
+    A = 1+a^2+b^2+a^2b^2,\;\; \varepsilon = (1-ab\cos\vartheta),\quad
     \cos\vartheta = {\bf r}_a\cdot{\bf r}_b\;, \label{eq:normfactor}
 \eeq
 and the norm $\Theta_c$
@@ -1187,7 +1206,7 @@ then applying it to (\ref{eq:directionalderiv}) yields
 \beq
     u(\Theta_a\, \adj{\mathsf{H}_a} )
     \hat{\bf H}\cdot\Delta\bfomega = \hat{\bf H}\cdot \mathsf{J}_{\omega_r}^{-1}(\bfOmega_a)
-    \Delta\bfomega,\; u(x)=\int_0^1 e^{-s x} \; ds
+    \Delta\bfomega, \quad u(x)=\int_0^1 e^{-s x} \; ds
     \label{eq:weinorman}
 \eeq
 a relationship to obtain $\mathsf{J}_{\omega_r}(\bfOmega_a)$. In fact (\ref{eq:weinorman}) constitutes a
@@ -1206,18 +1225,18 @@ we directly obtain the right Rodrigues Jacobian $\mathsf{J}_{\omega_r}(\bfOmega_
     \right|_{\Theta_b=0}. \label{eq:jacobianomega1}
 \eeq
 Further, Eqn.~(\ref{eq:jacobianomega1}) can be evaluated as,
-\begin{multline}
-    \mathsf{J}_{\omega_r}(\bfOmega_a) = (1-x)\, \mathsf{I}+ x\, {\bf r}_a{\bf r}_a^T + {1\over 2}[\bfOmega_a]_\times,\\
-    1-x = {\Theta_a\over 2}\tan^{-1}{\Theta_a\over 2}.
+\beq
+    \mathsf{J}_{\omega_r}(\bfOmega_a) = (1-x)\, \mathsf{I}+ x\, {\bf r}_a{\bf r}_a^T + {1\over 2}[\bfOmega_a]_\times,
+    \; 1-x = {\Theta_a\over 2}\tan^{-1}{\Theta_a\over 2}.
     \label{eq:RodweinormanJ}
-\end{multline}
+\eeq
 Similarly, we could leave $\bfOmega_b$ in the product expansion (\ref{eq:expproduct}) at a finite value
 and consider infinitesimal left variations of $\bfOmega_a\rightarrow {\bf 0}$. This naturally leads to the
 complementary left Rodrigues Jacobian
-\begin{multline}
-    \mathsf{J}_{\omega_l} (\bfOmega_b) = (1-y)\, \mathsf{I}+ y\, {\bf r}_b{\bf r}_b^T - {1\over 2}[\bfOmega_b]_\times,\\
-    1-y = {\Theta_b\over 2}\tan^{-1}{\Theta_b\over 2}.
-\end{multline}
+\beq
+    \mathsf{J}_{\omega_l} (\bfOmega_b) = (1-y)\, \mathsf{I}+ y\, {\bf r}_b{\bf r}_b^T - {1\over 2}[\bfOmega_b]_\times,
+    \; 1-y = {\Theta_b\over 2}\tan^{-1}{\Theta_b\over 2}.
+\eeq
 It shall be emphasised that the Jacobians above don't have singularities and are invertible, since all quantities
 are well defined for $\Theta\leq\pi$ and $\mathrm{det}( \mathsf{J}_{\omega_r}) = (1-x)^2 + \Theta_a^2/4$.
 
@@ -1325,12 +1344,12 @@ perturbations with covariances $\sfSigma{gg}$ and $\sfSigma{ff}$ respectively.
 Using the finite composition formula~(\ref{eq:addSO3finite}) rather than 
 the truncated BCH series, the composed rotation in exponential coordinates 
 can be expanded to second order as
-\begin{multline}
-    \bfOmega_c = \bfOmega_a + \bfOmega_b + \frac{1}{2}\bfOmega_a \times \bfOmega_b +\\
-    \frac{1}{12}\left(\bfOmega_a \times (\bfOmega_a \times \bfOmega_b) 
+\beq
+    \bfOmega_c = \bfOmega_a + \bfOmega_b + \frac{1}{2}\bfOmega_a \times \bfOmega_b
+    + \frac{1}{12}\left(\bfOmega_a \times (\bfOmega_a \times \bfOmega_b) 
     + \bfOmega_b \times (\bfOmega_b \times \bfOmega_a)\right) + \cdots
     \label{eq:BCHexpanded}
-\end{multline}
+\eeq
 Taking the expectation with $\langle \bfOmega_a \rangle = 0$, 
 $\langle \bfOmega_b \rangle = 0$:
 \beq
@@ -1357,24 +1376,127 @@ and translational ($v$) blocks of the cross-covariance.
 
 \subsection{Covariance correction}
 
-The second-order covariance correction arises from:
-(i)~the quadratic terms in the BCH expansion contributing 
-to the variance of $\bfOmega_c$, and
-(ii)~the coupling Jacobian $\mathsf{J}_t$ contributing 
-cross-terms between rotation and translation.
+The second-order covariance correction arises from the 
+quadratic term $Q_i = \frac{1}{2}\varepsilon_{i\alpha\beta}\,
+\omega_{a,\alpha}\,\omega_{b,\beta}$ in the BCH expansion.
+Writing $\bfOmega_c = L + Q + \cdots$ where 
+$L_i = \omega_{a,i} + \omega_{b,i}$ is the linear part, 
+the covariance picks up a correction from 
+$\langle Q_i Q_j \rangle - \langle Q_i \rangle \langle Q_j \rangle$.
 
-The correction takes the form
+\subsubsection{Rotational block ($3\times 3$)}
+Since $Q_i$ mixes components from two distinct random 
+vectors $\bfomega_a$ (from $\Delta g$) and $\bfomega_b$ 
+(from $\Delta f$), the indices must be tracked separately:
 \beq
-    \Delta\Sigma^{(2)}_{ij} = \frac{1}{4}\sum_{\alpha\beta\gamma\delta}
+    \Delta\Sigma^{(2),\omega\omega}_{ij} = \frac{1}{4}
+    \sum_{\alpha\beta\gamma\delta}
     \varepsilon_{i\alpha\beta}\,\varepsilon_{j\gamma\delta}\,
-    \left(\langle \delta_\alpha \delta_\beta \delta_\gamma \delta_\delta \rangle
-    - \langle \delta_\alpha \delta_\beta \rangle \langle \delta_\gamma \delta_\delta \rangle\right),
+    \mathcal{C}_{\alpha\beta\gamma\delta},
+    \label{eq:covcorrection_rotrot}
+\eeq
+where the fourth-moment tensor is
+\beq
+    \mathcal{C}_{\alpha\beta\gamma\delta} = 
+    \langle \omega_{a,\alpha}\,\omega_{b,\beta}\,
+    \omega_{a,\gamma}\,\omega_{b,\delta} \rangle
+    - \langle \omega_{a,\alpha}\,\omega_{b,\beta} \rangle
+    \langle \omega_{a,\gamma}\,\omega_{b,\delta} \rangle.
+\eeq
+For Gaussian perturbations, the fourth-order cumulant 
+vanishes identically. The correction comes entirely from 
+the factorization of the fourth moment via Isserlis' theorem:
+\begin{multline}
+    \langle \omega_{a,\alpha}\,\omega_{b,\beta}\,
+    \omega_{a,\gamma}\,\omega_{b,\delta} \rangle = 
+    [\sfSigma{aa}]_{\alpha\gamma}\,[\sfSigma{bb}]_{\beta\delta} \\
+    + [\sfSigma{ab}]_{\alpha\delta}\,[\sfSigma{ba}]_{\beta\gamma}
+    + [\sfSigma{ab}]_{\alpha\beta}\,[\sfSigma{ab}]_{\gamma\delta}.
+    \label{eq:isserlis}
+\end{multline}
+The last term cancels with the subtracted product, giving 
+the closed-form correction:
+\beq
+    \boxed{
+    \Delta\Sigma^{(2),\omega\omega}_{ij} = \frac{1}{4}
+    \sum_{\alpha\beta\gamma\delta}
+    \varepsilon_{i\alpha\beta}\,\varepsilon_{j\gamma\delta}
+    \Big([\sfSigma{aa}]_{\alpha\gamma}\,[\sfSigma{bb}]_{\beta\delta}
+    + [\sfSigma{ab}]_{\alpha\delta}\,[\sfSigma{ba}]_{\beta\gamma}\Big)
+    }
     \label{eq:covcorrection_explicit}
 \eeq
-where $\delta_\alpha$ are the perturbation components and the fourth-order
-cumulant captures the non-Gaussian contribution from the manifold curvature.
-For Gaussian perturbations, this simplifies via Isserlis' theorem to 
-products of second moments weighted by structure constants.
+When the perturbations are independent ($\sfSigma{ab} = 0$), 
+this simplifies to
+\beq
+    \Delta\Sigma^{(2),\omega\omega}_{ij} = \frac{1}{4}
+    \varepsilon_{i\alpha\beta}\,\varepsilon_{j\gamma\delta}\,
+    [\sfSigma{aa}]_{\alpha\gamma}\,[\sfSigma{bb}]_{\beta\delta},
+\eeq
+which can be evaluated using the identity 
+$\varepsilon_{i\alpha\beta}\varepsilon_{j\gamma\delta}
+A_{\alpha\gamma}B_{\beta\delta} = 
+(\mathrm{tr}\,\mathsf{A})(\mathrm{tr}\,\mathsf{B})\delta_{ij}
+- (\mathrm{tr}\,\mathsf{A})B_{ij} - A_{ij}(\mathrm{tr}\,\mathsf{B})
++ A_{ik}B_{kj} + A_{jk}B_{ki}$.
+
+\subsubsection{Rotation-translation cross block ($3\times 3$)}
+The translational component $t_{c,i}$ receives a second-order 
+contribution through the coupling 
+$\mathsf{S}^{-1}(\bfOmega)\mathsf{R}(\bfOmega)$, 
+expanded around the base point. Using the 
+SE(3) vector addition~(\ref{eq:SE3vectoraddition}), 
+the cross-covariance correction is
+\begin{multline}
+    \Delta\Sigma^{(2),\omega t}_{ij} = \frac{1}{2}
+    \varepsilon_{i\alpha\beta}\Big(
+    [\sfSigma{aa}]_{\alpha\gamma}\,
+    [\mathsf{J}_{\omega_r}]_{\gamma k}\,
+    [\sfSigma{bb}^{vv}]_{\beta j} \\
+    + [\sfSigma{ab}^{\omega v}]_{\alpha j}\,
+    [\sfSigma{ba}^{\omega\omega}]_{\beta\gamma}\,
+    [\mathsf{J}_t]_{\gamma k}\Big)
+    + \mathcal{O}(\sigma^5),
+    \label{eq:covcorrection_rottrans}
+\end{multline}
+where $[\sfSigma{}^{vv}]$, $[\sfSigma{}^{\omega v}]$ 
+denote the translational and cross blocks of the 
+$6\times 6$ covariance, and $\mathsf{J}_t$ is the 
+coupling Jacobian from~(\ref{eq:couplingJacobian}).
+
+\subsubsection{Translational block ($3\times 3$)}
+The pure translational correction receives contributions 
+from: (i)~the $\mathsf{J}_t$ coupling acting on the 
+rotational perturbation, and (ii)~the Hessian of 
+$\mathsf{S}^{-1}\mathsf{R}$ at the base point. 
+To leading order in $\sigma^4$:
+\begin{multline}
+    \Delta\Sigma^{(2),tt}_{ij} = 
+    [\mathsf{Q}]_{ik}\,[\sfSigma{aa}^{\omega\omega}]_{kl}\,
+    [\mathsf{Q}]^T_{lj} \\
+    + \frac{1}{4}\varepsilon_{i'\alpha\beta}\,
+    \varepsilon_{j'\gamma\delta}\,
+    [\mathsf{J}_t]_{ii'}\,[\mathsf{J}_t]_{jj'}\,
+    \mathcal{C}_{\alpha\beta\gamma\delta}
+    + \mathcal{O}(\sigma^5),
+    \label{eq:covcorrection_transtrans}
+\end{multline}
+where $\mathsf{Q}(\bfOmega_0)$ is the Hessian matrix from 
+the mean correction~(\ref{eq:fullmeancorrection}) and 
+$\mathcal{C}_{\alpha\beta\gamma\delta}$ is the same 
+Isserlis-reduced tensor as in~(\ref{eq:covcorrection_explicit}).
+
+\begin{remark}
+The key insight is that for Gaussian perturbations, no 
+higher-order moments are needed---the entire correction 
+is determined by the second-order covariance blocks 
+$\sfSigma{aa}$, $\sfSigma{bb}$, $\sfSigma{ab}$, 
+combined with the structure constants $\varepsilon_{ijk}$ 
+and the coupling Jacobian $\mathsf{J}_t$. The correction 
+vanishes on commutative groups (where $\varepsilon_{ijk}=0$) 
+and on $SO(3)$ only the rotational 
+block~(\ref{eq:covcorrection_explicit}) survives.
+\end{remark}
 
 %% ====================================================================
 \section{Saddlepoint Approximation Details}
@@ -1532,6 +1654,22 @@ J.~Wei and E.~Norman,
 ``On the global representations of the solutions of linear 
 differential equations as a product of exponentials,''
 \emph{Proc. Amer. Math. Soc.}, vol.~15, pp.~327--334, 1964.
+
+\bibitem{kuehnel2004}
+F.~O.~Kuehnel,
+``Bayesian estimation of nonlinear parameters on $SE(3)$ 
+Lie group,''
+in \emph{Bayesian Inference and Maximum Entropy Methods 
+in Science and Engineering} (MaxEnt 2004),
+R.~Fischer, R.~Preuss, and U.~von Toussaint, Eds.,
+AIP Conf.\ Proc., vol.~735, pp.~176--186, 2004.
+DOI:~10.1063/1.1835212.
+
+\bibitem{kuehnel2005}
+F.~O.~Kuehnel,
+``Local frame junction trees in SLAM,''
+\emph{AIP Conf.\ Proc.}, vol.~803, pp.~318--329, 2005.
+DOI:~10.1063/1.2149810.
 
 \bibitem{kuehnel2008}
 F.~O.~Kuehnel,
