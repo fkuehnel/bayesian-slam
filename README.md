@@ -62,6 +62,7 @@ Repository Structure
     ├── bias_parametrization.rs  # Experiment 1: scatter plots in L1 vs L2
     ├── propagation_accuracy.rs  # Experiment 2: 1st vs 2nd order vs MC truth
     └── marginalization.rs       # Experiment 3: convergence basin comparison
+
 Rust Implementation
 We provide a Rust implementation of the complete SE(3) inference framework. Rust is chosen for:
 
@@ -71,6 +72,7 @@ Safety: No silent numerical errors from uninitialized memory or index overflows 
 
 Planned Modules
 ModuleStatusDescriptionso3PlannedRodrigues formula, exp/log on SO(3), axis-angle representationse3PlannedSE(3) group operations, action on points, matrix representationbchPlannedClosed-form finite rotation composition via SU(2), limit cases, phase reflectionjacobiansPlannedJ_ωr, J_ωl, J_t, S⁻¹ identities, additive vs compositive derivativespropagationPlannedFirst-order covariance transport, second-order mean/covariance correctionssaddlepointPlannedProjective model cumulants, saddlepoint correction, marginalized MAPprojectivePlannedCamera model, calibration, derivatives through 3rd order
+
 Design Principles
 
 No dependency on nalgebra for core algebra: The 3×3 and 6×6 matrices arising in SE(3) have enough special structure (skew-symmetric, rotation, block-triangular) that specialized implementations outperform generic linear algebra

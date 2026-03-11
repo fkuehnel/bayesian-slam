@@ -8,6 +8,9 @@
 pub mod so3;
 pub mod se3;
 pub mod jacobians;
+pub mod bch;
+pub mod projective;
+pub mod saddlepoint;
 
 /// 3×3 matrix, row-major.
 pub type Mat3 = [[f64; 3]; 3];

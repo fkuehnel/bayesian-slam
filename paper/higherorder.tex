@@ -396,16 +396,12 @@ of the BCH map on $SE(3)$:
     \sfSigma{hh}^{(2)} = \sfSigma{hh}^{(1)} + 
     \Delta\Sigma^{(2)},
 \eeq
-where $\sfSigma{hh}^{(1)}$ is the first-order 
-result~\eqref{eq:firstordercomp}. The correction 
-$\Delta\Sigma^{(2)}$ is expressed entirely in terms of 
-the covariance blocks $\sfSigma{aa}$, $\sfSigma{bb}$, 
-$\sfSigma{ab}$ of the two perturbations (rotational and 
-translational), weighted by the structure constants 
-$\varepsilon_{ijk}$ and the coupling Jacobian 
-$\mathsf{J}_t$. For Gaussian perturbations, no 
-higher-order moments are needed.
-The explicit form is given in Appendix~\ref{app:secondorder}.
+where $\sfSigma{hh}^{(1)}$ is the first-order result~\eqref{eq:firstordercomp}.
+The correction $\Delta\Sigma^{(2)}$ is expressed entirely in terms of the
+covariance blocks $\sfSigma{aa}$, $\sfSigma{bb}$, $\sfSigma{ab}$ of the two
+perturbations (rotational and translational), weighted by the structure constants
+$\varepsilon_{ijk}$ and the coupling Jacobian $\mathsf{J}_t$. For Gaussian perturbations,
+no higher-order moments are needed. The explicit form is given in Appendix~\ref{app:secondorder}.
 \end{theorem}
 
 \subsection{Propagation of Points Through Uncertain Poses}
@@ -524,15 +520,15 @@ using the saddlepoint method.
 
 The saddlepoint approximation to the marginal 
 contribution of landmark $j$ is:
-\beq
+\begin{multline}
     \int p(f, \mathbf{x}^j | \mathbf{z})\, d\mathbf{x}^j
     \approx 
     p(f, \mathbf{x}^j_{\rm opt} | \mathbf{z})\,
-    (2\pi)^{3/2}\, |\mathsf{H}_j(f)|^{-1/2}\,
+    (2\pi)^{3/2}\, |\mathsf{H}_j(f)|^{-1/2}\\
     \exp\!\left(\frac{1}{6}\sum_{abc} 
     \kappa_{abc}^{(j)} s_a s_b s_c\right),
     \label{eq:saddlepoint}
-\eeq
+\end{multline}
 where $\mathsf{H}_j(f)$ is the Hessian of the 
 negative log-posterior with respect to $\mathbf{x}^j$ 
 at $\mathbf{x}^j_{\rm opt}$, $\kappa_{abc}^{(j)}$ 
@@ -1282,13 +1278,13 @@ Further, one can show that
     \mathsf{J}_{\omega_r}(\bfOmega_a),
     \label{eq:SinvRidentity}
 \eeq
-A more detailed calculation for the coupling Jacobian $\mathsf{J}_{t_r}$ yields
+A more detailed calculation for the coupling Jacobian $\mathsf{J}_{t}$ yields
 \beq
     \mathsf{J}_{t}(\bfOmega_a,{\bf t}_a) = {\partial [\mathsf{S}^{-1}(\bfOmega_a){\bf T}_a] \over
-    \partial \bfOmega_a} \, \mathsf{J}_{\omega_r}(\bfOmega_a),\quad {\bf T}_a = \mathsf{S}(\bfOmega_a) \, {\bf t}_a.
+    \partial \bfOmega_a} \, \mathsf{J}_{\omega_r}(\bfOmega_a),\; {\bf T}_a = \mathsf{S}(\bfOmega_a) \, {\bf t}_a.
     \label{eq:couplingJacobian}
 \eeq
-We can show that
+We also can derive
 \beqar
     {\partial [\mathsf{S}^{-1}(\bfOmega_a){\bf T}_a] \over
     \partial \bfOmega_a} & = &
@@ -1550,13 +1546,13 @@ are obtained by chain rule through $\mathsf{R}_f$:
 The saddlepoint approximation to the marginal contribution of 
 landmark $j$ is obtained by solving the saddlepoint equation 
 $K'({\bf s}_0) = 0$ and evaluating:
-\beq
+\begin{multline}
     \int e^{\ell({\bf x})} d{\bf x} \approx 
-    e^{\ell({\bf x}_{\rm opt})} \, (2\pi)^{3/2} |\mathsf{H}|^{-1/2}
+    e^{\ell({\bf x}_{\rm opt})} \, (2\pi)^{3/2} |\mathsf{H}|^{-1/2}\\
     \left(1 + \frac{1}{8}\sum_{abcd} \kappa_{abcd}\, [\mathsf{H}^{-1}]_{ab}[\mathsf{H}^{-1}]_{cd}
     + \frac{5}{24}\sum_{abc} \kappa_{abc}^2 \, [\mathsf{H}^{-3}]_{abc}\right),
     \label{eq:saddlepointfull}
-\eeq
+\end{multline}
 where $\kappa_{abcd}$ are the fourth cumulants and 
 $[\mathsf{H}^{-3}]_{abc} = \sum_{def} [\mathsf{H}^{-1}]_{ad}[\mathsf{H}^{-1}]_{be}[\mathsf{H}^{-1}]_{cf}$.
 
