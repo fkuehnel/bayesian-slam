@@ -1,0 +1,13 @@
+[package]
+name = "se3-inference"
+version = "0.1.0"
+edition = "2021"
+authors = ["Frank O. Kuehnel <kuehnel@excelsolutionsllc.com>"]
+description = "Higher-order uncertainty propagation and saddlepoint marginalization on the SE(3) Lie group"
+license = "MIT"
+
+[dependencies]
+
+[dev-dependencies]
+rand = "0.8"
+rand_distr = "0.4"
