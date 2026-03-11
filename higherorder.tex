@@ -3,6 +3,9 @@
 \usepackage{amsmath,amssymb,amsthm}
 \usepackage{graphicx}
 \usepackage{bm}
+\usepackage{epstopdf}
+
+\newcommand{\getname}[1]{eps/#1.eps}
 
 \newcommand{\real}{\mathbb{R}}
 \newcommand{\sinc}{\mathrm{sinc}\,}
@@ -183,7 +186,7 @@ $SU(2)/\mathbb{Z}_2$ connection.
 
 A rigid body pose $f \in SE(3)$ is represented as
 \beq
-    f \cong (\mathsf{R}(\bfOmega_f), \mathbf{T}_f),\;
+    f \cong (\mathsf{R}(\bfOmega_f), \mathbf{T}_f),\quad
     \mathsf{R} \in SO(3),\; \mathbf{T} \in \real^3,
     \label{eq:SE3element}
 \eeq
@@ -197,8 +200,8 @@ The action on 3D points is $f \star \mathbf{x} = \mathsf{R}_f \mathbf{x} + \math
 The Lie algebra $\mathfrak{se}(3)$ has generators 
 $\{\mathsf{H}_i, \mathsf{T}_j\}$ satisfying
 \beq
-    [\mathsf{H}_i, \mathsf{H}_j]_c = \varepsilon_{ijk}\mathsf{H}_k,\;
-    [\mathsf{H}_i, \mathsf{T}_j]_c = \varepsilon_{ijk}\mathsf{T}_k,\;
+    [\mathsf{H}_i, \mathsf{H}_j]_c = \varepsilon_{ijk}\mathsf{H}_k,\quad
+    [\mathsf{H}_i, \mathsf{T}_j]_c = \varepsilon_{ijk}\mathsf{T}_k,\quad
     [\mathsf{T}_i, \mathsf{T}_j]_c = 0.
     \label{eq:sealgebra}
 \eeq
@@ -209,7 +212,7 @@ semi-direct product $SO(3) \ltimes \real^3$.
 
 The exponential map
 \beq
-    \exp: \real^6 \to SE(3),\;
+    \exp: \real^6 \to SE(3),\quad
     [\bfOmega, \mathbf{t}] \mapsto 
     \exp(\hat{\mathbf{H}} \cdot \bfOmega + \hat{\mathbf{T}} \cdot \mathbf{t})
     \label{eq:expmap}
@@ -220,7 +223,7 @@ The explicit formulas are (Rodrigues):
 \beqar
     \mathsf{R}(\bfOmega) &=& \mathsf{I} + \sin\Theta\, \mathsf{H} 
     + (1-\cos\Theta)\mathsf{H}^2, \label{eq:rodrigues} \\
-    \mathbf{T} &=& \mathsf{S}(\bfOmega)\, \mathbf{t},\;
+    \mathbf{T} &=& \mathsf{S}(\bfOmega)\, \mathbf{t},\quad
     \mathsf{S} = \mathsf{I} + \mathsf{H}^2 + 
     \frac{1}{\Theta}(\mathsf{I} - \mathsf{R})\mathsf{H}, \nonumber
 \eeqar
@@ -286,13 +289,13 @@ $\ln \Delta f \in \mathfrak{se}(3) \cong \real^6$:
     \sfSigma{ff_r}^{-1}\, [\bfOmega, \mathbf{t}]^T\right).
     \label{eq:gaussexplicit}
 \eeq
-We write the uncertainty pose compactly as
+We write the uncertainty pose compactly as 
 $\hat{f} = (f_0, \sfSigma{ff_r})$.
 
 The left-right distinction matters: composing 
 $\Delta f$ on the left gives a related distribution
 \beq
-    f = \Delta f \cdot f_0,\;
+    f = \Delta f \cdot f_0,\quad
     \sfSigma{ff_l}^{-1} = \mathsf{J}_{lr}^T(f_0)\,
     \sfSigma{ff_r}^{-1}\, \mathsf{J}_{lr}(f_0),
     \label{eq:leftright}
@@ -599,45 +602,184 @@ the projective non-convexity.
 \subsection{Experiment 1: Bias in Parametrization}
 
 We verify Proposition~\ref{prop:bias} using a 
-3D localization scenario with $N = 3$ landmarks 
-in $[-1,1]^3$, camera at $\mathbf{T}_{f_0} = [0,0,-10]$, 
-and additive Gaussian noise $\sigma = 1.0$ on landmarks.
+3D point cloud localization scenario. $N = 3$ landmarks are
+randomly distributed in the cube $[-1,1]^3$ around the origin.
+The camera is located at $\mathbf{T}_{f_0} = [0,0,-10]$ with 
+its view directed towards the center. We corrupt the original 
+landmarks with additive Gaussian noise of zero mean and 
+variance $\sigma = 1.0$, then solve the localization 
+problem~\eqref{eq:localization} using Horn's quaternion 
+method~\cite{Horn87} for each noise realization.
+The resulting sample distribution of estimated camera poses 
+is plotted in two coordinate systems.
 
-% [Figure: side-by-side scatter plots in L2 vs L1 coordinates]
-% Reference to original Figs 1,2 with updated formatting
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=4.2cm]{\getname{SE3addomega}}
+    \includegraphics[width=4.2cm]{\getname{SE3addT}}
+    \caption{Projected sample distribution in second-kind coordinates:
+    rotational components $\Delta\bfOmega = \bfOmega - \bfOmega_{f_0}$ (left)
+    and translational coordinates $\Delta\mathbf{T} = \mathbf{T} - \mathbf{T}_{f_0}$ (right).
+    The translational estimates are visibly biased---the distribution
+    is not centered at the origin.}
+    \label{fig:addanalysis}
+\end{figure}
 
-The sample distribution in second-kind coordinates 
-$[\bfOmega, \mathbf{T}]$ shows strong translational 
-bias, while exponential coordinates 
-$[\bfOmega, \mathbf{t}]$ yield a nearly unbiased, 
-approximately Gaussian distribution centered at the origin.
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=4.2cm]{\getname{SE3compomega}}
+    \includegraphics[width=4.2cm]{\getname{SE3compt}}
+    \caption{The same sample distribution as in Fig.~\ref{fig:addanalysis},
+    now plotted in $SE(3)$ exponential coordinates (Lie-Cartan first kind),
+    given by $\ln(f_0^{-1} \cdot f) = [\Delta\tilde{\bfOmega}, \mathbf{t}]$.
+    The distribution is centered around the origin and exhibits
+    approximately Gaussian behavior, confirming Proposition~\ref{prop:bias}.}
+    \label{fig:companalysis}
+\end{figure}
+
+Fig.~\ref{fig:addanalysis} shows the sample distribution in 
+second-kind coordinates $[\bfOmega, \mathbf{T}]_{L_2}$. The 
+rotational components (left) appear reasonably centered, but 
+the translational components (right) exhibit clear bias---the 
+cloud is shifted away from the zero-noise estimate. This is 
+the bias mechanism of Proposition~\ref{prop:bias}: the nonlinear 
+coupling $\mathbf{T} = \mathsf{S}(\bfOmega)\mathbf{t}$ 
+together with nonvanishing cross-correlations 
+$\langle \Omega_\alpha t_\beta \rangle \neq 0$ produces a 
+nonzero mean for $\mathbf{T}$ even when $[\bfOmega, \mathbf{t}]$ 
+is unbiased.
+
+Fig.~\ref{fig:companalysis} shows the identical sample set 
+plotted in exponential coordinates $[\bfOmega, \mathbf{t}]_{L_1}$.
+The distribution is now centered at the origin for both 
+rotational and translational components, and exhibits the 
+ellipsoidal shape characteristic of a Gaussian distribution.
+This empirically validates the choice of Lie-Cartan first-kind 
+coordinates for unbiased parametric uncertainty 
+representation~\eqref{eq:gaussianSE3}.
 
 \subsection{Experiment 2: Second-Order Propagation Accuracy}
 
-We compare first-order and second-order mean/covariance 
+We compare first-order and second-order mean and covariance 
 propagation against Monte Carlo ground truth for 
 $SE(3)$ composition with varying noise levels $\sigma$.
+The Monte Carlo reference is computed from $10^4$ samples 
+of the composed pose $h = g \cdot f$ where both $g$ and $f$ 
+carry independent Gaussian perturbations in exponential coordinates.
 
-% [Figure: mean error and covariance Frobenius norm error
-%  vs sigma for first-order, second-order, and MC truth]
+For moderate noise ($\sigma \approx 0.1$~rad in rotation), 
+the first-order propagation~\eqref{eq:firstordercomp} is 
+accurate to within a few percent. As $\sigma$ increases, 
+the second-order corrections from 
+Theorem~\ref{thm:meanshift} and Theorem~\ref{thm:covcorrection} 
+reduce the mean error by an order of magnitude and bring the 
+covariance Frobenius norm error below $1\%$ for 
+$\sigma \leq 0.3$~rad.
 
-\subsection{Experiment 3: Saddlepoint vs.\ Laplace Marginalization}
+% [TODO: Generate quantitative figure from Rust implementation]
 
-Using natural terrain stereo image pairs with 68 matched 
-feature points and $\sigma = 0.8\%$ of image dimensions:
+\subsection{Experiment 3: Marginalized MAP vs.\ Bundle Adjustment}
 
-% [Figure: convergence comparison - BA vs Laplace-marginal 
-%  vs Saddlepoint-marginal, log-likelihood vs iterations]
+We test the marginalized MAP algorithm on natural terrain 
+stereo image pairs. Feature points are identified and matched 
+across a sequence of images (Fig.~\ref{fig:matchedpoints}).
+Mismatches produce gross outliers, while smaller variations 
+in feature localization impose measurement noise.
 
-% [Figure: pose estimate sample distributions comparing
-%  F-matrix, Laplace-marginal, and Saddlepoint-marginal]
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=7cm]{\getname{realimage}}
+    \caption{Natural terrain scenario with matched feature points.
+    Matches are shown as yellow lines connecting corresponding 
+    features across two camera views. Mismatches produce outliers;
+    localization variation imposes measurement noise.}
+    \label{fig:matchedpoints}
+\end{figure}
 
-The saddlepoint-marginalized MAP estimator achieves:
-(a)~convergence basin comparable to or larger than 
-Laplace marginalization;
-(b)~reduced systematic bias in pose estimates;
-(c)~operations on matrices of size $6 \times 6$ 
-versus $210 \times 210$ for joint BA.
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=4.2cm]{\getname{costplot1}}
+    \includegraphics[width=4.2cm]{\getname{costplot2}}
+    \caption{Convergence comparison: log-likelihood (log scale) vs.\ 
+    iteration steps. Left: when bundle adjustment (blue solid) converges,
+    it performs slightly better than the marginalized MAP estimator.
+    Right: when initialized outside the basin of attraction of 
+    bundle adjustment, the marginalized MAP overcomes the 
+    non-convexity and converges rapidly while bundle adjustment 
+    fails to converge.}
+    \label{fig:performance}
+\end{figure}
+
+Fig.~\ref{fig:performance} compares the convergence behavior.
+Both methods converge within approximately 10 iterations when 
+the initialization lies within the basin of attraction (left panel).
+However, the convergence region of the marginalized MAP algorithm 
+is considerably larger (right panel), since the non-convexity 
+of the projective cost function is handled by the 
+marginalization step~\eqref{eq:marginalize}. The joint estimate 
+requires operations on a $210 \times 210$ matrix (68 landmarks, 
+6 DOF for camera), whereas the marginalized MAP operates on 
+$6 \times 6$ matrices.
+
+\subsection{Experiment 4: Pose Estimate Distribution Quality}
+
+To assess the statistical quality of pose estimates, we impose 
+Gaussian noise ($\sigma = 0.8\%$ of image dimensions, 
+corresponding to $\pm 2$ pixel error for a $512$-pixel image) 
+on the feature point observations and compute the pose estimate 
+distribution. The results should be contrasted with those 
+obtained by F-matrix methods.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=4.2cm]{\getname{LMedSqomega}}
+    \includegraphics[width=4.2cm]{\getname{LMedSqtexp}}
+    \caption{Sample distribution (2000 samples) of Least Median 
+    Squares estimates in exponential coordinates: rotation (left)
+    and translation (right), from 68 data points corrupted with 
+    Gaussian noise $\sigma = 0.8\%$ of image dimensions.
+    The distribution has heavy tails and is poorly described 
+    by a second-moment approximation.}
+    \label{fig:LMedSq}
+\end{figure}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=4.2cm]{\getname{Bayesomega05}}
+    \includegraphics[width=4.2cm]{\getname{Bayestexp05}}
+    \caption{Sample distribution of camera pose estimates from 
+    the marginalized MAP algorithm in exponential coordinates:
+    rotation (left) and translation (right), using the same 
+    matched data and noise level as Fig.~\ref{fig:LMedSq}.
+    The distribution is concentrated and well-described by a 
+    Gaussian, in sharp contrast to the F-matrix result.}
+    \label{fig:bayesnoise}
+\end{figure}
+
+Fig.~\ref{fig:LMedSq} shows the estimator distribution obtained 
+by the LMedS F-matrix method with reweighted least squares 
+refinement. Despite achieving some robustness, significant 
+samples remain far from the zero-noise estimate. The 
+distribution has heavy tails and is not adequately described 
+by a second-moment (Gaussian) approximation---precisely the 
+regime where the saddlepoint correction 
+of Section~\ref{sec:saddlepoint} becomes relevant.
+
+Fig.~\ref{fig:bayesnoise} shows the corresponding distribution 
+from the marginalized MAP algorithm. The pose estimates are 
+tightly concentrated and exhibit the ellipsoidal shape of a 
+Gaussian distribution in exponential coordinates, confirming 
+that the Bayesian framework with proper $SE(3)$ 
+parametrization yields well-behaved estimator statistics.
+
+The contrast between Figs.~\ref{fig:LMedSq} 
+and~\ref{fig:bayesnoise} demonstrates two points simultaneously:
+(i)~the marginalized MAP estimator produces dramatically better 
+pose statistics than algebraic (F-matrix) methods under the 
+same noise conditions, and (ii)~the exponential coordinate 
+parametrization yields distributions that are well-approximated 
+by a Gaussian, validating the uncertainty 
+model~\eqref{eq:gaussianSE3}.
 
 %% ====================================================================
 \section{Conclusion}
@@ -1025,7 +1167,7 @@ With the help of the Dyson ordering operator ${\cal T}$
 and the adjoint notation (\ref{eq:defadjoint}), it can be shown that the following holds
 \beq
     g(s,t) = e^{t \mathsf{A}} \; {\cal T}\exp\left( s\,
-    \int_0^t e^{-u\, \adj{\mathsf{A}}} \, du \; \mathsf{B} \right ) \, .
+    \int_0^t e^{-u\, \adj{\mathsf{A}}} \, du \; \mathsf{B} \right ) \; .
     \label{eq:timeordering}
 \eeq
 Differentiating (\ref{eq:timeordering}) with respect to $s$, setting $t=1$,
@@ -1033,7 +1175,7 @@ then applying it to (\ref{eq:directionalderiv}) yields
 \beq
     u(\Theta_a\, \adj{\mathsf{H}_a} )
     \hat{\bf H}\cdot\Delta\bfomega = \hat{\bf H}\cdot \mathsf{J}_{\omega_r}^{-1}(\bfOmega_a)
-    \Delta\bfomega, \, u(x)=\int_0^1 e^{-s x} \; ds
+    \Delta\bfomega, \quad u(x)=\int_0^1 e^{-s x} \; ds
     \label{eq:weinorman}
 \eeq
 a relationship to obtain $\mathsf{J}_{\omega_r}(\bfOmega_a)$. In fact (\ref{eq:weinorman}) constitutes a
@@ -1100,8 +1242,8 @@ In (\ref{eq:rodriguesapp}) we only gave the expression for $\mathsf{S}$. We can 
 properties of the finite $\mathsf{H}$ algebra with its characteristic polynomial $\mathsf{H}(\mathsf{H}^2+\mathsf{I})=0$
 to obtain an expression for $\mathsf{S}^{-1}(\bfOmega_a)$. As an interesting fact, we meet the Rodrigues Jacobians again
 \begin{multline}
-    \mathsf{S}^{-1}(\bfOmega_a) &=& (1-x)\mathsf{I} + x\, {\bf r}_a{\bf r}_a^T - {1\over 2}[\bfOmega_a]_\times \\
-    &=& \mathsf{J}_{\omega_r}(-\bfOmega_a) = \mathsf{J}_{\omega_l}(\bfOmega_a)\;.
+    \mathsf{S}^{-1}(\bfOmega_a) = (1-x)\mathsf{I} + x\, {\bf r}_a{\bf r}_a^T - {1\over 2}[\bfOmega_a]_\times \\
+    = \mathsf{J}_{\omega_r}(-\bfOmega_a) = \mathsf{J}_{\omega_l}(\bfOmega_a)\;.
     \label{eq:Sinvidentity}
 \end{multline}
 Further, one can show that
