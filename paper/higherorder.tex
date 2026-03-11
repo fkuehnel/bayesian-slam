@@ -874,7 +874,7 @@ and can be depicted geometrically as the path connecting the identity element $1
 $g$. In (\ref{eq:exponentialmap}), the basis elements
 of the 6-dimensional vector space $\real^6\cong T_1SE(3)$ are compactly denoted as,
 \beq
-    \hat{\bf H}\cdot\bfomega=\mathsf{H}_x\Omega_x+\mathsf{H}_y\Omega_y+\mathsf{H}_z\Omega_z,\quad
+    \hat{\bf H}\cdot\bfomega=\mathsf{H}_x\Omega_x+\mathsf{H}_y\Omega_y+\mathsf{H}_z\Omega_z,\;
     \hat{\bf T}\cdot{\bf t} =\mathsf{T}_x t_x + \mathsf{T}_y t_y + \mathsf{T}_z t_z,
     \label{eq:generatingmatrices}
 \eeq
@@ -1102,7 +1102,7 @@ the following Eqn.\ holds,
 \end{multline}
 The normalizing factor, $C = \sqrt{A - \varepsilon^2}$, can be given as
 \beq
-    A = 1+a^2+b^2+a^2b^2,\;\; \varepsilon = (1-ab\cos\vartheta),\quad
+    A = 1+a^2+b^2+a^2b^2,\;\; \varepsilon = (1-ab\cos\vartheta),\;
     \cos\vartheta = {\bf r}_a\cdot{\bf r}_b\;, \label{eq:normfactor}
 \eeq
 and the norm $\Theta_c$
@@ -1206,7 +1206,7 @@ then applying it to (\ref{eq:directionalderiv}) yields
 \beq
     u(\Theta_a\, \adj{\mathsf{H}_a} )
     \hat{\bf H}\cdot\Delta\bfomega = \hat{\bf H}\cdot \mathsf{J}_{\omega_r}^{-1}(\bfOmega_a)
-    \Delta\bfomega, \quad u(x)=\int_0^1 e^{-s x} \; ds
+    \Delta\bfomega,\; u(x)=\int_0^1 e^{-s x} \; ds
     \label{eq:weinorman}
 \eeq
 a relationship to obtain $\mathsf{J}_{\omega_r}(\bfOmega_a)$. In fact (\ref{eq:weinorman}) constitutes a
@@ -1225,18 +1225,17 @@ we directly obtain the right Rodrigues Jacobian $\mathsf{J}_{\omega_r}(\bfOmega_
     \right|_{\Theta_b=0}. \label{eq:jacobianomega1}
 \eeq
 Further, Eqn.~(\ref{eq:jacobianomega1}) can be evaluated as,
-\beq
-    \mathsf{J}_{\omega_r}(\bfOmega_a) = (1-x)\, \mathsf{I}+ x\, {\bf r}_a{\bf r}_a^T + {1\over 2}[\bfOmega_a]_\times,
-    \; 1-x = {\Theta_a\over 2}\tan^{-1}{\Theta_a\over 2}.
+\begin{multline}
+    \mathsf{J}_{\omega_r}(\bfOmega_a) = (1-x)\, \mathsf{I}+ x\, {\bf r}_a{\bf r}_a^T + {1\over 2}[\bfOmega_a]_\times,\\
+    1-x = {\Theta_a\over 2}\tan^{-1}{\Theta_a\over 2}.
     \label{eq:RodweinormanJ}
-\eeq
+\end{multline}
 Similarly, we could leave $\bfOmega_b$ in the product expansion (\ref{eq:expproduct}) at a finite value
-and consider infinitesimal left variations of $\bfOmega_a\rightarrow {\bf 0}$. This naturally leads to the
-complementary left Rodrigues Jacobian
-\beq
-    \mathsf{J}_{\omega_l} (\bfOmega_b) = (1-y)\, \mathsf{I}+ y\, {\bf r}_b{\bf r}_b^T - {1\over 2}[\bfOmega_b]_\times,
-    \; 1-y = {\Theta_b\over 2}\tan^{-1}{\Theta_b\over 2}.
-\eeq
+and consider infinitesimal left variations of $\bfOmega_a\rightarrow {\bf 0}$. This naturally leads to the complementary left Rodrigues Jacobian
+\begin{multline}
+    \mathsf{J}_{\omega_l} (\bfOmega_b) = (1-y)\, \mathsf{I}+ y\, {\bf r}_b{\bf r}_b^T - {1\over 2}[\bfOmega_b]_\times,\\
+    1-y = {\Theta_b\over 2}\tan^{-1}{\Theta_b\over 2}.
+\end{multline}
 It shall be emphasised that the Jacobians above don't have singularities and are invertible, since all quantities
 are well defined for $\Theta\leq\pi$ and $\mathrm{det}( \mathsf{J}_{\omega_r}) = (1-x)^2 + \Theta_a^2/4$.
 
@@ -1344,12 +1343,12 @@ perturbations with covariances $\sfSigma{gg}$ and $\sfSigma{ff}$ respectively.
 Using the finite composition formula~(\ref{eq:addSO3finite}) rather than 
 the truncated BCH series, the composed rotation in exponential coordinates 
 can be expanded to second order as
-\beq
-    \bfOmega_c = \bfOmega_a + \bfOmega_b + \frac{1}{2}\bfOmega_a \times \bfOmega_b
-    + \frac{1}{12}\left(\bfOmega_a \times (\bfOmega_a \times \bfOmega_b) 
+\begin{multline}
+    \bfOmega_c = \bfOmega_a + \bfOmega_b + \frac{1}{2}\bfOmega_a \times \bfOmega_b +\\
+    \frac{1}{12}\left(\bfOmega_a \times (\bfOmega_a \times \bfOmega_b) 
     + \bfOmega_b \times (\bfOmega_b \times \bfOmega_a)\right) + \cdots
     \label{eq:BCHexpanded}
-\eeq
+\end{multline}
 Taking the expectation with $\langle \bfOmega_a \rangle = 0$, 
 $\langle \bfOmega_b \rangle = 0$:
 \beq
