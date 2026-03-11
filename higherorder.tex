@@ -548,6 +548,7 @@ for landmark $j$ observed from camera $i$ is:
     \sfSigma{zz}^{-1}\, \mathsf{P}_t\, \mathsf{R}_{f_i}.
     \label{eq:Mmatrix}
 \eeq
+The full measurement information matrix is block-sparse, with nonzero off-diagonal blocks only where landmark $j$ is visible from camera $i$; the saddlepoint marginalization exploits this structure by integrating each landmark's $3\times 3$ block independently, reducing the system from $(6n+3m)$ to $6n$ dimensions.
 
 The third-order derivatives required for~\eqref{eq:saddlepoint} 
 involve $\partial^3 \pi / \partial \mathbf{x}'^3$, which 
@@ -854,7 +855,7 @@ and can be depicted geometrically as the path connecting the identity element $1
 $g$. In (\ref{eq:exponentialmap}), the basis elements
 of the 6-dimensional vector space $\real^6\cong T_1SE(3)$ are compactly denoted as,
 \beq
-    \hat{\bf H}\cdot\bfomega=\mathsf{H}_x\Omega_x+\mathsf{H}_y\Omega_y+\mathsf{H}_z\Omega_z,\quad
+    \hat{\bf H}\cdot\bfomega=\mathsf{H}_x\Omega_x+\mathsf{H}_y\Omega_y+\mathsf{H}_z\Omega_z,\;
     \hat{\bf T}\cdot{\bf t} =\mathsf{T}_x t_x + \mathsf{T}_y t_y + \mathsf{T}_z t_z,
     \label{eq:generatingmatrices}
 \eeq
@@ -999,9 +1000,9 @@ In matrix form this is precisely the Rodrigues formula (\ref{eq:rodriguesapp}).
 
 Equivalently, writing $U$ in quaternion parametrisation,
 \beq
-   U = q_0\,\mathsf{u}_0 + q_i\,\mathsf{u}_i\,,\quad
+   U = q_0\,\mathsf{u}_0 + q_i\,\mathsf{u}_i\,,
    q_0 = \cos\frac{\Theta}{2}\,,\quad
-   {\bf q} = \sin\frac{\Theta}{2}\;{\bf r}\,,\quad
+   {\bf q} = \sin\frac{\Theta}{2}\;{\bf r}\,,
    q_0^2 + {\bf q}^{\!\top}{\bf q} = 1\,,
 \eeq
 the induced rotation matrix becomes
@@ -1015,7 +1016,7 @@ This exhibits $SU(2)\cong S^3$ directly.
 \paragraph{The covering map.}
 The surjective homomorphism $\pi\colon SU(2)\to SO(3)$ is therefore given by
 \beq
-   \pi(U) = \mathsf{R}(U)\,,\qquad
+   \pi(U) = \mathsf{R}(U)\,,\quad
    \ker\pi = \{\pm \mathsf{u}_0\}\,.
 \eeq
 Hence
