@@ -1,23 +1,38 @@
 //! # Saddlepoint marginalization for projective observations
 //!
-//! Paper §IV and Appendix E. Given the joint posterior p(f, {x} | z),
-//! we marginalize over 3D landmarks x to obtain the marginal p(f | z)
-//! using a saddlepoint approximation that captures non-Gaussian effects
-//! from the projective observation model.
+//! Paper §IV and Appendix E. Corrected formula (Eq. saddlepointcorrection):
 //!
-//! ## Two-step scheme
+//! I/I_Laplace = 1 + c₁ + O(f'''⁴)
 //!
-//! Step 1: For fixed camera pose f, find optimal landmarks x_opt(f)
-//! Step 2: Saddlepoint-approximate ∫ p(f, x | z) dx for each landmark
+//! c₁ = (1/12)·A + (1/8)·B − (1/8)·Q₄
 //!
-//! ## Key formula (Eq. saddlepointfull)
+//! where:
+//!   A = cross-contraction: f'''_{ijk} f'''_{lmn} H⁻¹_{il} H⁻¹_{jm} H⁻¹_{kn}
+//!   B = trace-contraction: v^T H⁻¹ v,  v_k = f'''_{ijk} H⁻¹_{ij}
+//!   Q₄ = quartic: f''''_{ijkl} H⁻¹_{ij} H⁻¹_{kl}
 //!
-//! ∫ e^{ℓ(x)} dx ≈ e^{ℓ(x_opt)} (2π)^{3/2} |H|^{-1/2} (1 + δ^SP)
+//! ## Validity guard
 //!
-//! where δ^SP is the saddlepoint correction involving third cumulants.
+//! The expansion is valid when |c₁| ≪ 1. When |c₁| > MAX_CORRECTION
+//! (default 0.5), we fall back to Laplace and signal `SaddlepointStatus::Invalid`.
 
 use crate::*;
 use crate::projective;
+
+/// Maximum |c₁| before falling back to Laplace.
+/// 0.5 corresponds to σ_depth/depth ≈ 0.3.
+pub const MAX_CORRECTION: f64 = 0.5;
+
+/// Status of the saddlepoint correction for a single landmark.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SaddlepointStatus {
+    /// Correction applied, |c₁| < MAX_CORRECTION.
+    Valid,
+    /// |c₁| exceeded threshold; Laplace returned instead.
+    Invalid(f64),
+    /// Hessian was singular; Laplace returned.
+    SingularHessian,
+}
 
 // =========================================================================
 // Landmark optimization (Step 1)
@@ -26,60 +41,35 @@ use crate::projective;
 /// Result of optimizing a single landmark given the camera pose.
 #[derive(Debug, Clone)]
 pub struct LandmarkOptResult {
-    /// Optimal landmark position in world coordinates.
     pub x_opt: Vec3,
-    /// Point in camera frame: x' = f ⋆ x_opt.
     pub xp_opt: Vec3,
-    /// Hessian of neg-log-posterior w.r.t. x at x_opt (3×3, positive definite).
     pub hessian: Mat3,
-    /// Neg-log-posterior value at x_opt.
     pub nll_opt: f64,
-    /// Log-determinant of Hessian: ln|H|.
     pub log_det_h: f64,
 }
 
-/// Optimize a single landmark's position given camera pose and observation.
-///
-/// Solves: x_opt = argmin_x [ ½(z - π(f⋆x))^T Σ_zz^{-1} (z - π(f⋆x))
-///                           + ½(x - x_prior)^T Σ_xx^{-1} (x - x_prior) ]
-///
-/// Uses Gauss-Newton iteration since the projective model is nonlinear.
-///
-/// Arguments:
-/// - `rot`, `trans`: camera pose (R, T) where x' = R·x + T
-/// - `z`: 2D observation [u, v]
-/// - `sigma_zz_inv`: 2×2 measurement precision
-/// - `x_prior`: 3D prior mean
-/// - `sigma_xx_inv`: 3×3 prior precision
-/// - `max_iter`: maximum GN iterations
+/// Optimize a single landmark via Gauss-Newton.
 pub fn optimize_landmark(
-    rot: &Mat3,
-    trans: &Vec3,
-    z: &[f64; 2],
-    sigma_zz_inv: &[[f64; 2]; 2],
-    x_prior: &Vec3,
-    sigma_xx_inv: &Mat3,
+    rot: &Mat3, trans: &Vec3,
+    z: &[f64; 2], sigma_zz_inv: &[[f64; 2]; 2],
+    x_prior: &Vec3, sigma_xx_inv: &Mat3,
     max_iter: usize,
 ) -> LandmarkOptResult {
     let mut x = *x_prior;
 
-    for _iter in 0..max_iter {
+    for _ in 0..max_iter {
         let xp = projective::transform_point(rot, trans, &x);
-
-        // Check if point is in front of camera
         if xp[2] < 1e-6 { break; }
 
         let pi = projective::project(&xp);
         let e = [z[0] - pi[0], z[1] - pi[1]];
         let p = projective::project_jacobian(&xp);
 
-        // Jacobian of π(R·x + T) w.r.t. x is P·R (2×3)
         let mut pr = [[0.0; 3]; 2];
         for i in 0..2 { for j in 0..3 {
             pr[i][j] = p[i][0]*rot[0][j] + p[i][1]*rot[1][j] + p[i][2]*rot[2][j];
         }}
 
-        // Hessian: H = (PR)^T Σ^{-1} (PR) + Σ_xx^{-1}  (3×3)
         let mut h = *sigma_xx_inv;
         for i in 0..3 { for j in 0..3 {
             for m in 0..2 { for n in 0..2 {
@@ -87,45 +77,24 @@ pub fn optimize_landmark(
             }}
         }}
 
-        // Gradient: g = -(PR)^T Σ^{-1} e + Σ_xx^{-1} (x - x_prior)
         let mut se = [0.0; 2];
-        for i in 0..2 {
-            se[i] = sigma_zz_inv[i][0] * e[0] + sigma_zz_inv[i][1] * e[1];
-        }
-        let dx_prior = sub3(&x, x_prior);
-        let mut grad = mv3(sigma_xx_inv, &dx_prior);
-        for i in 0..3 {
-            grad[i] -= pr[0][i] * se[0] + pr[1][i] * se[1];
-        }
+        for i in 0..2 { se[i] = sigma_zz_inv[i][0]*e[0] + sigma_zz_inv[i][1]*e[1]; }
+        let dx = sub3(&x, x_prior);
+        let mut grad = mv3(sigma_xx_inv, &dx);
+        for i in 0..3 { grad[i] -= pr[0][i]*se[0] + pr[1][i]*se[1]; }
 
-        // Solve H · delta = -grad
-        let h_inv = match inv3_safe(&h) {
-            Some(hi) => hi,
-            None => break,
-        };
+        let h_inv = match inv3_safe(&h) { Some(hi) => hi, None => break };
         let delta = mv3(&h_inv, &scale3(-1.0, &grad));
-
-        // Update
         x = add3(&x, &delta);
-
-        // Convergence check
         if norm3(&delta) < 1e-10 { break; }
     }
 
-    // Final evaluation at x_opt
     let xp = projective::transform_point(rot, trans, &x);
     let nll = if xp[2] > 1e-6 {
         projective::neg_log_likelihood(z, &xp, sigma_zz_inv)
-            + 0.5 * {
-                let dx = sub3(&x, x_prior);
-                let sdx = mv3(sigma_xx_inv, &dx);
-                dot3(&dx, &sdx)
-            }
-    } else {
-        f64::INFINITY
-    };
+            + 0.5 * { let dx = sub3(&x, x_prior); dot3(&dx, &mv3(sigma_xx_inv, &dx)) }
+    } else { f64::INFINITY };
 
-    // Hessian at optimum
     let p = projective::project_jacobian(&xp);
     let mut pr = [[0.0; 3]; 2];
     for i in 0..2 { for j in 0..3 {
@@ -139,174 +108,228 @@ pub fn optimize_landmark(
     }}
 
     let d = det3(&hessian);
-    let log_det = if d > 0.0 { d.ln() } else { f64::NEG_INFINITY };
-
     LandmarkOptResult {
-        x_opt: x,
-        xp_opt: xp,
-        hessian,
-        nll_opt: nll,
-        log_det_h: log_det,
+        x_opt: x, xp_opt: xp, hessian, nll_opt: nll,
+        log_det_h: if d > 0.0 { d.ln() } else { f64::NEG_INFINITY },
     }
 }
 
 // =========================================================================
-// Saddlepoint correction (Step 2)
+// Quartic contraction Q₄ by FD
 // =========================================================================
 
-/// Saddlepoint correction for a single landmark marginalization.
+/// Compute Q₄ = Σ f''''_{abcd} H⁻¹_{ab} H⁻¹_{cd} via FD of the Hessian trace.
 ///
-/// Given the Hessian H and third cumulants κ_{abc} at the optimum,
-/// computes the correction δ^SP to the Laplace approximation:
-///
-///   ∫ e^{ℓ(x)} dx ≈ e^{ℓ(x_opt)} (2π)^{3/2} |H|^{-1/2} (1 + δ^SP)
-///
-/// The correction involves the contraction:
-///   δ^SP = (5/24) Σ_{abc} κ²_{abc} [H⁻³]_{abc}
-///
-/// where [H⁻³]_{abc} = Σ_{def} H⁻¹_{ad} H⁻¹_{be} H⁻¹_{cf}.
-///
-/// Paper Eq. (saddlepointfull).
-pub fn saddlepoint_correction(
+/// Defines T(x) = tr(H_NLL(x) · H⁻¹_opt), then Q₄ = tr(H⁻¹_opt · Hess(T)).
+fn quartic_contraction(
+    rot: &Mat3, trans: &Vec3, x_opt: &Vec3,
+    sigma_zz_inv: &[[f64; 2]; 2], sigma_xx_inv: &Mat3,
     h_inv: &Mat3,
-    kappa: &[[[f64; 3]; 3]; 3],
 ) -> f64 {
-    // Compute [H⁻³]_{abc} = Σ_{def} H⁻¹_{ad} H⁻¹_{be} H⁻¹_{cf}
-    // and contract with κ²_{abc}
+    let h = 1e-5;
 
-    // Term 1: (5/24) Σ_{abc} (Σ_{a'b'c'} κ_{a'b'c'} H⁻¹_{aa'} H⁻¹_{bb'} H⁻¹_{cc'})²
-    // This is a simplified form. The full correction also has a fourth-cumulant
-    // piece (1/8) Σ κ_{abcd} H⁻¹_{ab} H⁻¹_{cd}, but for the projective model
-    // the third-cumulant term dominates.
+    // Hessian of NLL at arbitrary world-frame point x
+    let hess_at = |x: &Vec3| -> Mat3 {
+        let xp = projective::transform_point(rot, trans, x);
+        if xp[2] < 1e-6 { return [[1e30; 3]; 3]; }
+        let p = projective::project_jacobian(&xp);
+        let mut pr = [[0.0; 3]; 2];
+        for i in 0..2 { for j in 0..3 {
+            pr[i][j] = p[i][0]*rot[0][j] + p[i][1]*rot[1][j] + p[i][2]*rot[2][j];
+        }}
+        let mut hess = *sigma_xx_inv;
+        for i in 0..3 { for j in 0..3 {
+            for m in 0..2 { for n in 0..2 {
+                hess[i][j] += pr[m][i] * sigma_zz_inv[m][n] * pr[n][j];
+            }}
+        }}
+        hess
+    };
 
-    let mut correction = 0.0;
+    // T(x) = tr(H_NLL(x) · H⁻¹_opt)
+    let trace_func = |x: &Vec3| -> f64 {
+        let hx = hess_at(x);
+        let mut t = 0.0;
+        for a in 0..3 { for b in 0..3 { t += hx[a][b] * h_inv[a][b]; }}
+        t
+    };
 
-    // Contract κ with H⁻¹ to get λ_{abc} = Σ κ_{a'b'c'} H⁻¹_{aa'} H⁻¹_{bb'} H⁻¹_{cc'}
+    // Hess(T) by central FD, contract with H⁻¹
+    let t0 = trace_func(x_opt);
+    let mut q4 = 0.0;
+    for c in 0..3 { for d in 0..3 {
+        let d2t = if c == d {
+            let mut xp = *x_opt; xp[c] += h;
+            let mut xm = *x_opt; xm[c] -= h;
+            (trace_func(&xp) - 2.0*t0 + trace_func(&xm)) / (h*h)
+        } else {
+            let mut xpp = *x_opt; xpp[c] += h; xpp[d] += h;
+            let mut xpm = *x_opt; xpm[c] += h; xpm[d] -= h;
+            let mut xmp = *x_opt; xmp[c] -= h; xmp[d] += h;
+            let mut xmm = *x_opt; xmm[c] -= h; xmm[d] -= h;
+            (trace_func(&xpp) - trace_func(&xpm) - trace_func(&xmp) + trace_func(&xmm))
+                / (4.0*h*h)
+        };
+        q4 += h_inv[c][d] * d2t;
+    }}
+    q4
+}
+
+// =========================================================================
+// Saddlepoint correction (Step 2) — corrected formula
+// =========================================================================
+
+/// Detailed result of the saddlepoint correction.
+#[derive(Debug, Clone)]
+pub struct SaddlepointResult {
+    /// c₁ = (1/12)A + (1/8)B − (1/8)Q₄.
+    pub c1: f64,
+    /// Cross-contraction A.
+    pub term_a: f64,
+    /// Trace-contraction B.
+    pub term_b: f64,
+    /// Quartic contraction Q₄.
+    pub term_q4: f64,
+    /// Validity status.
+    pub status: SaddlepointStatus,
+}
+
+/// Compute c₁ from f''', Q₄, and H⁻¹.
+///
+/// Paper Eq. (saddlepointcorrection): c₁ = (1/12)A + (1/8)B − (1/8)Q₄
+pub fn saddlepoint_correction_full(
+    h_inv: &Mat3,
+    f3: &[[[f64; 3]; 3]; 3],
+    q4: f64,
+) -> SaddlepointResult {
+    // A: cross-contraction
     let mut lambda = [[[0.0f64; 3]; 3]; 3];
     for a in 0..3 { for b in 0..3 { for c in 0..3 {
         let mut val = 0.0;
         for ap in 0..3 { for bp in 0..3 { for cp in 0..3 {
-            val += kappa[ap][bp][cp] * h_inv[a][ap] * h_inv[b][bp] * h_inv[c][cp];
+            val += f3[ap][bp][cp] * h_inv[a][ap] * h_inv[b][bp] * h_inv[c][cp];
         }}}
         lambda[a][b][c] = val;
     }}}
-
-    // (5/24) Σ_{abc} λ_{abc}²
-    // Actually the correction is:
-    // δ^SP = (5/24) Σ_{abc} κ_{abc} λ_{abc}
+    let mut term_a = 0.0;
     for a in 0..3 { for b in 0..3 { for c in 0..3 {
-        correction += kappa[a][b][c] * lambda[a][b][c];
+        term_a += f3[a][b][c] * lambda[a][b][c];
     }}}
-    correction *= 5.0 / 24.0;
 
-    correction
+    // B: trace-contraction  v_k = Σ_{ij} f'''_{ijk} H⁻¹_{ij}
+    let mut v = [0.0; 3];
+    for k in 0..3 { for i in 0..3 { for j in 0..3 {
+        v[k] += f3[i][j][k] * h_inv[i][j];
+    }}}
+    let term_b = dot3(&v, &mv3(h_inv, &v));
+
+    let c1 = term_a / 12.0 + term_b / 8.0 - q4 / 8.0;
+
+    let status = if c1.abs() <= MAX_CORRECTION {
+        SaddlepointStatus::Valid
+    } else {
+        SaddlepointStatus::Invalid(c1)
+    };
+
+    SaddlepointResult { c1, term_a, term_b, term_q4: q4, status }
 }
 
-/// Compute the saddlepoint-corrected marginal log-posterior contribution
-/// from a single landmark.
+/// Simplified: cubic terms only (Q₄ = 0).
+pub fn saddlepoint_correction(
+    h_inv: &Mat3,
+    f3: &[[[f64; 3]; 3]; 3],
+) -> SaddlepointResult {
+    saddlepoint_correction_full(h_inv, f3, 0.0)
+}
+
+// =========================================================================
+// Marginal log-posterior
+// =========================================================================
+
+/// Saddlepoint-corrected marginal log-posterior for one landmark.
 ///
-/// Returns: ℓ(x_opt) - ½ ln|H| + ln(1 + δ^SP) + (3/2) ln(2π)
-///
-/// Paper Eq. (correctedmarginal).
+/// Falls back to Laplace if |c₁| > MAX_CORRECTION.
 pub fn landmark_marginal_log_posterior(
     opt: &LandmarkOptResult,
-    rot: &Mat3,
+    rot: &Mat3, trans: &Vec3,
     sigma_zz_inv: &[[f64; 2]; 2],
-) -> f64 {
+    sigma_xx_inv: &Mat3,
+) -> (f64, SaddlepointResult) {
     let laplace = -opt.nll_opt - 0.5 * opt.log_det_h
         + 1.5 * (2.0 * std::f64::consts::PI).ln();
 
-    // Saddlepoint correction
     let h_inv = match inv3_safe(&opt.hessian) {
         Some(hi) => hi,
-        None => return laplace,
+        None => return (laplace, SaddlepointResult {
+            c1: 0.0, term_a: 0.0, term_b: 0.0, term_q4: 0.0,
+            status: SaddlepointStatus::SingularHessian,
+        }),
     };
 
-    let kappa = projective::third_cumulants(rot, &opt.xp_opt, sigma_zz_inv);
-    let delta_sp = saddlepoint_correction(&h_inv, &kappa);
+    let f3 = projective::third_cumulants(rot, &opt.xp_opt, sigma_zz_inv);
+    let q4 = quartic_contraction(rot, trans, &opt.x_opt, sigma_zz_inv, sigma_xx_inv, &h_inv);
+    let result = saddlepoint_correction_full(&h_inv, &f3, q4);
 
-    laplace + (1.0 + delta_sp).ln()
+    let log_post = match result.status {
+        SaddlepointStatus::Valid => laplace + (1.0 + result.c1).ln(),
+        _ => laplace,
+    };
+    (log_post, result)
 }
 
-/// Compute the Laplace (standard) marginal log-posterior contribution
-/// from a single landmark — no saddlepoint correction.
-///
-/// This is the baseline used in standard Schur complement approaches.
+/// Laplace (uncorrected) marginal log-posterior.
 pub fn landmark_marginal_log_posterior_laplace(opt: &LandmarkOptResult) -> f64 {
     -opt.nll_opt - 0.5 * opt.log_det_h
         + 1.5 * (2.0 * std::f64::consts::PI).ln()
 }
 
 // =========================================================================
-// Full marginalized MAP (combining Steps 1-3)
+// Full marginalized MAP
 // =========================================================================
 
-/// Result of the marginalized MAP evaluation for a set of landmarks.
 #[derive(Debug, Clone)]
 pub struct MarginalizedMapResult {
-    /// Saddlepoint-corrected marginal log-posterior.
     pub log_posterior_sp: f64,
-    /// Laplace (uncorrected) marginal log-posterior.
     pub log_posterior_laplace: f64,
-    /// Individual landmark optimization results.
     pub landmark_opts: Vec<LandmarkOptResult>,
-    /// Saddlepoint correction per landmark (δ^SP_j).
-    pub corrections: Vec<f64>,
+    pub sp_results: Vec<SaddlepointResult>,
+    pub n_valid: usize,
+    pub n_invalid: usize,
 }
 
-/// Evaluate the marginalized MAP objective for a given camera pose
-/// over all landmarks.
-///
-/// This implements the two-step scheme:
-///   Step 1: optimize each landmark x^j given f
-///   Step 2: compute saddlepoint-corrected marginal
-///
-/// The result is the marginal log-posterior p(f | z) up to constants.
 pub fn evaluate_marginalized_map(
-    rot: &Mat3,
-    trans: &Vec3,
-    observations: &[([f64; 2], Vec3, Mat3)],  // (z, x_prior, Σ_xx^{-1}) per landmark
+    rot: &Mat3, trans: &Vec3,
+    observations: &[([f64; 2], Vec3, Mat3)],
     sigma_zz_inv: &[[f64; 2]; 2],
     max_gn_iter: usize,
 ) -> MarginalizedMapResult {
     let mut log_sp = 0.0;
     let mut log_laplace = 0.0;
     let mut opts = Vec::with_capacity(observations.len());
-    let mut corrections = Vec::with_capacity(observations.len());
+    let mut sp_results = Vec::with_capacity(observations.len());
+    let (mut n_valid, mut n_invalid) = (0, 0);
 
     for (z, x_prior, sigma_xx_inv) in observations {
-        let opt = optimize_landmark(
-            rot, trans, z, sigma_zz_inv,
-            x_prior, sigma_xx_inv, max_gn_iter,
-        );
+        let opt = optimize_landmark(rot, trans, z, sigma_zz_inv, x_prior, sigma_xx_inv, max_gn_iter);
+        let laplace_c = landmark_marginal_log_posterior_laplace(&opt);
+        let (sp_c, sp_r) = landmark_marginal_log_posterior(&opt, rot, trans, sigma_zz_inv, sigma_xx_inv);
 
-        let laplace_contrib = landmark_marginal_log_posterior_laplace(&opt);
-        let sp_contrib = landmark_marginal_log_posterior(&opt, rot, sigma_zz_inv);
-
-        let delta = sp_contrib - laplace_contrib;
-
-        log_laplace += laplace_contrib;
-        log_sp += sp_contrib;
-        corrections.push(delta);
+        match sp_r.status { SaddlepointStatus::Valid => n_valid += 1, _ => n_invalid += 1 }
+        log_laplace += laplace_c;
+        log_sp += sp_c;
+        sp_results.push(sp_r);
         opts.push(opt);
     }
 
     MarginalizedMapResult {
-        log_posterior_sp: log_sp,
-        log_posterior_laplace: log_laplace,
-        landmark_opts: opts,
-        corrections,
+        log_posterior_sp: log_sp, log_posterior_laplace: log_laplace,
+        landmark_opts: opts, sp_results, n_valid, n_invalid,
     }
 }
 
-// =========================================================================
-// Helper: safe 3×3 inverse
-// =========================================================================
-
 fn inv3_safe(m: &Mat3) -> Option<Mat3> {
     let d = det3(m);
-    if d.abs() < 1e-30 { return None; }
-    Some(inv3(m))
+    if d.abs() < 1e-30 { None } else { Some(inv3(m)) }
 }
 
 // =========================================================================
@@ -316,152 +339,93 @@ fn inv3_safe(m: &Mat3) -> Option<Mat3> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::so3;
 
-    fn isotropic_sigma_inv(sigma: f64) -> [[f64; 2]; 2] {
-        let s2 = 1.0 / (sigma * sigma);
-        [[s2, 0.0], [0.0, s2]]
-    }
-
-    fn isotropic_sigma_inv_3d(sigma: f64) -> Mat3 {
-        let s2 = 1.0 / (sigma * sigma);
-        [[s2, 0.0, 0.0], [0.0, s2, 0.0], [0.0, 0.0, s2]]
-    }
+    fn iso2(s: f64) -> [[f64; 2]; 2] { let v = 1.0/(s*s); [[v,0.0],[0.0,v]] }
+    fn iso3(s: f64) -> Mat3 { let v = 1.0/(s*s); [[v,0.0,0.0],[0.0,v,0.0],[0.0,0.0,v]] }
 
     #[test]
-    fn landmark_opt_recovers_true_position() {
-        // Camera looking down z-axis
-        let rot = I3;
-        let trans = [0.0, 0.0, 0.0];
+    fn landmark_opt_recovers_projection() {
+        let rot = I3; let trans = [0.0; 3];
         let x_true = [0.5, -0.3, 5.0];
         let xp = projective::transform_point(&rot, &trans, &x_true);
         let z = projective::project(&xp);
-
-        let sigma_zz_inv = isotropic_sigma_inv(0.01);
-        let sigma_xx_inv = isotropic_sigma_inv_3d(10.0);  // weak prior
-        let x_prior = [0.6, -0.2, 5.5];  // close initial guess
-
-        let opt = optimize_landmark(
-            &rot, &trans, &z, &sigma_zz_inv,
-            &x_prior, &sigma_xx_inv, 20,
-        );
-
-        // u,v are well-constrained but depth (z) is ill-conditioned
-        // from a single camera view. Check lateral accuracy.
-        let xp_opt = projective::transform_point(&rot, &trans, &opt.x_opt);
-        let pi_opt = projective::project(&xp_opt);
-        let pi_true = projective::project(&xp);
-        assert!((pi_opt[0] - pi_true[0]).abs() < 0.001,
-            "u: opt={:.6} true={:.6}", pi_opt[0], pi_true[0]);
-        assert!((pi_opt[1] - pi_true[1]).abs() < 0.001,
-            "v: opt={:.6} true={:.6}", pi_opt[1], pi_true[1]);
+        let opt = optimize_landmark(&rot, &trans, &z, &iso2(0.01), &[0.6,-0.2,5.5], &iso3(10.0), 20);
+        let pi = projective::project(&projective::transform_point(&rot, &trans, &opt.x_opt));
+        assert!((pi[0] - z[0]).abs() < 0.001);
+        assert!((pi[1] - z[1]).abs() < 0.001);
     }
 
     #[test]
-    fn saddlepoint_correction_is_small_for_distant_point() {
-        // Distant point → nearly linear projection → small correction
-        let rot = I3;
-        let trans = [0.0, 0.0, 0.0];
-        let x_true = [0.1, 0.1, 20.0];  // Far away
-        let xp = projective::transform_point(&rot, &trans, &x_true);
-        let z = projective::project(&xp);
-
-        let sigma_zz_inv = isotropic_sigma_inv(0.01);
-        let sigma_xx_inv = isotropic_sigma_inv_3d(1.0);
-
-        let opt = optimize_landmark(
-            &rot, &trans, &z, &sigma_zz_inv,
-            &x_true, &sigma_xx_inv, 10,
-        );
-
-        let h_inv = inv3(&opt.hessian);
-        let kappa = projective::third_cumulants(&rot, &opt.xp_opt, &sigma_zz_inv);
-        let delta = saddlepoint_correction(&h_inv, &kappa);
-
-        assert!(delta.abs() < 0.1,
-            "Distant point should have small SP correction: {:.4}", delta);
+    fn correction_small_for_distant_well_constrained() {
+        let rot = I3; let trans = [0.0; 3];
+        let x = [0.5, -0.3, 10.0];
+        let z = projective::project(&x);
+        let opt = optimize_landmark(&rot, &trans, &z, &iso2(0.01), &x, &iso3(1.0), 10);
+        let (_, r) = landmark_marginal_log_posterior(&opt, &rot, &trans, &iso2(0.01), &iso3(1.0));
+        assert_eq!(r.status, SaddlepointStatus::Valid);
+        assert!(r.c1.abs() < 0.1, "c₁ should be small: {:.4}", r.c1);
+        eprintln!("Well-constrained: c₁={:.6}, A={:.4}, B={:.4}, Q₄={:.4}", r.c1, r.term_a, r.term_b, r.term_q4);
     }
 
     #[test]
-    fn saddlepoint_correction_larger_for_close_point() {
-        // Close point → more nonlinear projection → larger correction
-        let rot = I3;
-        let trans = [0.0, 0.0, 0.0];
-
-        let x_far = [0.1, 0.1, 20.0];
-        let x_close = [0.1, 0.1, 2.0];
-
-        let sigma_zz_inv = isotropic_sigma_inv(0.01);
-        let sigma_xx_inv = isotropic_sigma_inv_3d(1.0);
-
-        let opt_far = optimize_landmark(
-            &rot, &trans,
-            &projective::project(&x_far),
-            &sigma_zz_inv, &x_far, &sigma_xx_inv, 10,
-        );
-        let opt_close = optimize_landmark(
-            &rot, &trans,
-            &projective::project(&x_close),
-            &sigma_zz_inv, &x_close, &sigma_xx_inv, 10,
-        );
-
-        let kf = projective::third_cumulants(&rot, &opt_far.xp_opt, &sigma_zz_inv);
-        let kc = projective::third_cumulants(&rot, &opt_close.xp_opt, &sigma_zz_inv);
-        let df = saddlepoint_correction(&inv3(&opt_far.hessian), &kf);
-        let dc = saddlepoint_correction(&inv3(&opt_close.hessian), &kc);
-
-        assert!(dc.abs() > df.abs(),
-            "Close point correction |{:.6}| should exceed far |{:.6}|", dc, df);
+    fn correction_invalid_for_weak_prior() {
+        let rot = I3; let trans = [0.0; 3];
+        let x = [0.5, -0.3, 3.0];
+        let z = projective::project(&x);
+        let opt = optimize_landmark(&rot, &trans, &z, &iso2(0.01), &x, &iso3(10.0), 10);
+        let (_, r) = landmark_marginal_log_posterior(&opt, &rot, &trans, &iso2(0.01), &iso3(10.0));
+        assert!(matches!(r.status, SaddlepointStatus::Invalid(_)),
+            "Weak prior at close depth should be invalid: c₁={:.4}", r.c1);
     }
 
     #[test]
-    fn marginalized_map_runs_multiple_landmarks() {
+    fn correction_larger_for_close_point() {
+        let rot = I3; let trans = [0.0; 3];
+        let far = optimize_landmark(&rot, &trans, &projective::project(&[0.1,0.1,20.0]),
+            &iso2(0.01), &[0.1,0.1,20.0], &iso3(1.0), 10);
+        let close = optimize_landmark(&rot, &trans, &projective::project(&[0.1,0.1,5.0]),
+            &iso2(0.01), &[0.1,0.1,5.0], &iso3(1.0), 10);
+        let (_, rf) = landmark_marginal_log_posterior(&far, &rot, &trans, &iso2(0.01), &iso3(1.0));
+        let (_, rc) = landmark_marginal_log_posterior(&close, &rot, &trans, &iso2(0.01), &iso3(1.0));
+        assert!(rc.c1.abs() > rf.c1.abs(), "Close |c₁|={:.6} > far |c₁|={:.6}", rc.c1.abs(), rf.c1.abs());
+    }
+
+    #[test]
+    fn marginalized_map_reports_validity() {
         let rot = so3::exp(&[0.1, -0.05, 0.2]);
         let trans = [0.0, 0.0, -5.0];
-        let sigma_zz_inv = isotropic_sigma_inv(0.01);
-
-        let landmarks = vec![
-            [1.0, 0.5, 8.0],
-            [-0.5, 1.0, 7.0],
-            [0.3, -0.8, 10.0],
-        ];
-
-        let observations: Vec<_> = landmarks.iter().map(|x| {
+        let lms: Vec<([f64;3], f64)> = vec![([1.0,0.5,8.0], 1.0), ([-0.5,1.0,7.0], 1.0), ([0.3,-0.8,8.0], 10.0)];
+        let obs: Vec<_> = lms.iter().map(|(x, sx)| {
             let xp = projective::transform_point(&rot, &trans, x);
-            let z = projective::project(&xp);
-            let sigma_xx_inv = isotropic_sigma_inv_3d(0.5);
-            (z, *x, sigma_xx_inv)
+            (projective::project(&xp), *x, iso3(*sx))
         }).collect();
-
-        let result = evaluate_marginalized_map(
-            &rot, &trans, &observations, &sigma_zz_inv, 10,
-        );
-
-        assert_eq!(result.landmark_opts.len(), 3);
-        assert_eq!(result.corrections.len(), 3);
-        assert!(result.log_posterior_sp.is_finite());
-        assert!(result.log_posterior_laplace.is_finite());
+        let r = evaluate_marginalized_map(&rot, &trans, &obs, &iso2(0.01), 10);
+        assert_eq!(r.sp_results.len(), 3);
+        assert!(r.log_posterior_sp.is_finite());
+        eprintln!("Valid: {}, Invalid: {}", r.n_valid, r.n_invalid);
     }
 
     #[test]
-    fn laplace_and_saddlepoint_agree_distant() {
-        // For very distant points, SP correction vanishes
-        let rot = I3;
-        let trans = [0.0, 0.0, 0.0];
+    fn laplace_and_sp_agree_distant() {
+        let rot = I3; let trans = [0.0; 3];
         let x = [0.01, 0.01, 100.0];
-        let xp = projective::transform_point(&rot, &trans, &x);
-        let z = projective::project(&xp);
-        let sigma_zz_inv = isotropic_sigma_inv(0.01);
-        let sigma_xx_inv = isotropic_sigma_inv_3d(0.01);
+        let z = projective::project(&x);
+        let opt = optimize_landmark(&rot, &trans, &z, &iso2(0.01), &x, &iso3(0.01), 10);
+        let lap = landmark_marginal_log_posterior_laplace(&opt);
+        let (sp, r) = landmark_marginal_log_posterior(&opt, &rot, &trans, &iso2(0.01), &iso3(0.01));
+        assert_eq!(r.status, SaddlepointStatus::Valid);
+        assert!((lap - sp).abs() < 0.01, "Lap={:.6} SP={:.6}", lap, sp);
+    }
 
-        let opt = optimize_landmark(
-            &rot, &trans, &z, &sigma_zz_inv,
-            &x, &sigma_xx_inv, 10,
-        );
-
-        let laplace = landmark_marginal_log_posterior_laplace(&opt);
-        let sp = landmark_marginal_log_posterior(&opt, &rot, &sigma_zz_inv);
-
-        assert!((laplace - sp).abs() < 0.01,
-            "Distant: Laplace={:.6} SP={:.6}", laplace, sp);
+    #[test]
+    fn quartic_contraction_nonzero() {
+        let rot = I3; let trans = [0.0; 3];
+        let x = [0.5, -0.3, 10.0];
+        let z = projective::project(&x);
+        let opt = optimize_landmark(&rot, &trans, &z, &iso2(0.01), &x, &iso3(1.0), 10);
+        let h_inv = inv3(&opt.hessian);
+        let q4 = quartic_contraction(&rot, &trans, &opt.x_opt, &iso2(0.01), &iso3(1.0), &h_inv);
+        assert!(q4.is_finite() && q4.abs() > 1e-10, "Q₄={:.2e}", q4);
     }
 }

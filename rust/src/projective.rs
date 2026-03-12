@@ -89,9 +89,9 @@ pub fn project_hessian(xp: &Vec3) -> (Mat3, Mat3) {
 ///
 /// Paper Eq. (thirdderivs). Non-vanishing components:
 ///   ∂³u/∂x₁'∂x₃'² = 2/x₃'³
-///   ∂³u/∂x₃'³ = 6u/x₃'³ = 6x₁'/x₃'⁴
+///   ∂³u/∂x₃'³ = −6u/x₃'³ = −6x₁'/x₃'⁴  (NOTE: negative sign)
 ///   ∂³v/∂x₂'∂x₃'² = 2/x₃'³
-///   ∂³v/∂x₃'³ = 6v/x₃'³ = 6x₂'/x₃'⁴
+///   ∂³v/∂x₃'³ = −6v/x₃'³ = −6x₂'/x₃'⁴  (NOTE: negative sign)
 pub fn project_third_deriv(xp: &Vec3) -> ([[[f64; 3]; 3]; 3], [[[f64; 3]; 3]; 3]) {
     let z = xp[2];
     let z3 = z * z * z;
