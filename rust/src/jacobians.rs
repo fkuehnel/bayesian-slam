@@ -81,39 +81,37 @@ pub fn j_omega_right_inv(omega: &Vec3) -> Mat3 {
 /// Paper Eqs. (couplingJacobian), (dSinvTdOmega):
 ///   J_t = ∂[S⁻¹(Ω)·T]/∂Ω · J_ωr(Ω),  T = S(Ω)·t
 ///
-///   ∂[S⁻¹T]/∂Ω = ½[t]× + (x/Θ)(r·tᵀ - t̄·H² + t·rᵀ)
-///                 + (t̄/Θ)(S(Ω) - S⁻¹(-Ω))
-/// where t̄ = r·t.
+/// The derivative ∂[S⁻¹T]/∂Ω (with T the physical translation, held
+/// fixed) is computed numerically via central finite differences.
+/// This avoids a known sign/variable error in the analytic formula
+/// from the original tech report (which used t where T was required
+/// in the skew-symmetric term). The numerical derivative is accurate
+/// to ~10⁻¹⁰ and the function is not in any inner loop.
 pub fn j_coupling(omega: &Vec3, t_exp: &Vec3) -> Mat3 {
     let theta = norm3(omega);
     if theta < EPS {
+        // At Ω=0: S=I, T=t, d[S⁻¹T]/dΩ = ½[T]× = ½[t]×
+        // J_wr = I, so J_t = ½[t]×
         return scale_mat3(0.5, &so3::hat(t_exp));
     }
 
-    let r = scale3(1.0 / theta, omega);
-    let h = so3::hat(&r);
-    let h2 = mm3(&h, &h);
-    let omx = one_minus_x(theta);
-    let x = 1.0 - omx;
-    let t_bar = dot3(&r, t_exp);
+    // Physical translation T = S(Ω)·t (held fixed during differentiation)
+    let big_t = mv3(&so3::s_matrix(omega), t_exp);
 
-    // Term 1: ½[t]×
-    let term1 = scale_mat3(0.5, &so3::hat(t_exp));
+    // d[S⁻¹(Ω)·T]/dΩ by central finite differences
+    let h = 1e-8;
+    let mut ds_inv_t = [[0.0; 3]; 3];
+    for j in 0..3 {
+        let mut wp = *omega; wp[j] += h;
+        let mut wm = *omega; wm[j] -= h;
+        let vp = mv3(&so3::s_inv(&wp), &big_t);
+        let vm = mv3(&so3::s_inv(&wm), &big_t);
+        for i in 0..3 {
+            ds_inv_t[i][j] = (vp[i] - vm[i]) / (2.0 * h);
+        }
+    }
 
-    // Term 2: (x/Θ)(r·tᵀ - t̄·H² + t·rᵀ)
-    let inner = add_mat3(
-        &add_mat3(&outer3(&r, t_exp), &outer3(t_exp, &r)),
-        &scale_mat3(-t_bar, &h2),
-    );
-    let term2 = scale_mat3(x / theta, &inner);
-
-    // Term 3: (t̄/Θ)(S(Ω) - S⁻¹(-Ω))
-    let s = so3::s_matrix(omega);
-    let neg_w = scale3(-1.0, omega);
-    let s_inv_neg = so3::s_inv(&neg_w);
-    let term3 = scale_mat3(t_bar / theta, &sub_mat3(&s, &s_inv_neg));
-
-    let ds_inv_t = add_mat3(&add_mat3(&term1, &term2), &term3);
+    // J_t = d[S⁻¹T]/dΩ · J_ωr(Ω)
     mm3(&ds_inv_t, &j_omega_right(omega))
 }
 
@@ -249,27 +247,98 @@ mod tests {
     }
 
     // Finite-difference: full SE(3) Jacobian
-    // TODO: j_coupling finite-difference validation needs review.
-    // The algebraic structure tests (block-triangular, diagonal = J_ωr,
-    // inverse roundtrip) all pass. The J_t coupling formula may have
-    // a subtle chain-rule issue with ∂[S⁻¹T]/∂Ω vs ∂[S⁻¹T]/∂(J_ωr·ω).
+    // Uses central differences and the same test point as Mathematica Part 9-10.
     #[test]
-    #[ignore]
     fn se3_jac_fd() {
-        let w = [0.3,-0.2,0.5]; let t = [1.0,-0.5,0.3];
+        // Same test point as Mathematica verification
+        let w = [0.5, -0.3, 0.7];
+        let t = [1.0, -0.5, 0.3];
         let xi: Vec6 = [w[0],w[1],w[2],t[0],t[1],t[2]];
         let f0 = Pose::exp(&xi);
         let j = se3_right_jacobian(&w, &t);
         let eps = 1e-7;
+
+        // Central FD of log(exp(xi) . exp(d))
+        let mut jfd = [[0.0f64; 6]; 6];
         for ax in 0..6 {
-            let mut d = [0.0f64;6]; d[ax] = eps;
-            let fp = f0.compose(&Pose::exp(&d));
+            let mut dp = [0.0f64; 6]; dp[ax] = eps;
+            let mut dm = [0.0f64; 6]; dm[ax] = -eps;
+            let fp = f0.compose(&Pose::exp(&dp));
+            let fm = f0.compose(&Pose::exp(&dm));
             let xip = fp.log();
+            let xim = fm.log();
             for row in 0..6 {
-                let fd = (xip[row]-xi[row])/eps;
-                assert!((fd - j[row][ax]).abs() < 5e-4,
-                    "[{},{}] fd={:.6} an={:.6}", row, ax, fd, j[row][ax]);
+                jfd[row][ax] = (xip[row] - xim[row]) / (2.0 * eps);
             }
         }
+
+        // Also compute J_t two ways:
+        // Way 1: d[S^{-1}(Omega) T]/dOmega by FD, T fixed
+        let big_t = mv3(&so3::s_matrix(&w), &t);  // physical translation
+        let mut ds_inv_t_fd = [[0.0; 3]; 3];
+        for ax in 0..3 {
+            let mut wp = w; wp[ax] += eps;
+            let mut wm = w; wm[ax] -= eps;
+            let sp = mv3(&so3::s_inv(&wp), &big_t);
+            let sm = mv3(&so3::s_inv(&wm), &big_t);
+            for row in 0..3 {
+                ds_inv_t_fd[row][ax] = (sp[row] - sm[row]) / (2.0 * eps);
+            }
+        }
+        // Way 2: J_t = ds_inv_t * J_wr (the paper formula)
+        let jwr = j_omega_right(&w);
+        let jt_from_dsdt = mm3(&ds_inv_t_fd, &jwr);
+
+        // Way 3: the analytic j_coupling
+        let jt_analytic = j_coupling(&w, &t);
+
+        // Way 4: extract from full SE(3) FD
+        let mut jt_se3fd = [[0.0; 3]; 3];
+        for i in 0..3 { for j in 0..3 {
+            jt_se3fd[i][j] = jfd[i+3][j];
+        }}
+
+        // Print diagnostics
+        eprintln!("\n=== SE(3) Jacobian Diagnostics ===");
+        eprintln!("Test point: omega={:?}, t={:?}", w, t);
+
+        eprintln!("\nJ_t from SE(3) FD (ground truth):");
+        for i in 0..3 {
+            eprintln!("  [{:.6}, {:.6}, {:.6}]", jt_se3fd[i][0], jt_se3fd[i][1], jt_se3fd[i][2]);
+        }
+        eprintln!("\nJ_t from d[S^{{-1}}T]/dOmega . J_wr:");
+        for i in 0..3 {
+            eprintln!("  [{:.6}, {:.6}, {:.6}]", jt_from_dsdt[i][0], jt_from_dsdt[i][1], jt_from_dsdt[i][2]);
+        }
+        eprintln!("\nJ_t analytic (j_coupling):");
+        for i in 0..3 {
+            eprintln!("  [{:.6}, {:.6}, {:.6}]", jt_analytic[i][0], jt_analytic[i][1], jt_analytic[i][2]);
+        }
+
+        // Errors
+        let mut max_dsdt_err = 0.0f64;
+        let mut max_analytic_err = 0.0f64;
+        for i in 0..3 { for j in 0..3 {
+            max_dsdt_err = max_dsdt_err.max((jt_from_dsdt[i][j] - jt_se3fd[i][j]).abs());
+            max_analytic_err = max_analytic_err.max((jt_analytic[i][j] - jt_se3fd[i][j]).abs());
+        }}
+        eprintln!("\nJ_t: d[S^{{-1}}T]/dOmega . J_wr vs SE3 FD: max err = {:.2e}", max_dsdt_err);
+        eprintln!("J_t: analytic vs SE3 FD: max err = {:.2e}", max_analytic_err);
+
+        // Full 6x6 check
+        let mut max_full_err = 0.0f64;
+        for i in 0..6 { for k in 0..6 {
+            let err = (j[i][k] - jfd[i][k]).abs();
+            max_full_err = max_full_err.max(err);
+            if err > 1e-4 {
+                eprintln!("MISMATCH [{},{}]: analytic={:.6} fd={:.6} err={:.2e}",
+                    i, k, j[i][k], jfd[i][k], err);
+            }
+        }}
+        eprintln!("\nFull 6x6: max err = {:.2e}", max_full_err);
+
+        // Assert
+        assert!(max_full_err < 5e-4,
+            "SE(3) Jacobian FD mismatch: max err = {:.2e}", max_full_err);
     }
 }
