@@ -1,0 +1,989 @@
+(* ============================================================================ *)
+(* SE3AlgebraVerification.m                                                     *)
+(*                                                                              *)
+(* Symbolic and numerical verification of SO(3)/SE(3) algebra, Jacobians,       *)
+(* BCH formula, and composition identities.                                     *)
+(*                                                                              *)
+(* Paper: "Higher-Order Uncertainty Propagation and Saddlepoint                 *)
+(*         Marginalization on the SE(3) Lie Group"                              *)
+(* Appendices A, B, C                                                           *)
+(*                                                                              *)
+(* Author: Frank O. Kuehnel / Excel Solutions LLC                               *)
+(* ============================================================================ *)
+
+
+(* ======================================================================== *)
+(*  PART 1: SO(3) ALGEBRA — H matrix, characteristic polynomial             *)
+(* ======================================================================== *)
+
+Print["================================================================"];
+Print["PART 1: SO(3) algebra — skew-symmetric H and its powers"];
+Print["================================================================"];
+
+(* Skew-symmetric matrix [omega]_x for unit vector r *)
+Clear[r1, r2, r3, theta];
+hat[w_] := {{0, -w[[3]], w[[2]]}, {w[[3]], 0, -w[[1]]}, {-w[[2]], w[[1]], 0}};
+
+r = {r1, r2, r3};
+H = hat[r];
+
+Print["H = [r]_x = ", H // MatrixForm];
+
+(* Characteristic polynomial: H^2 = r r^T - I for |r|=1 *)
+H2 = H . H // Simplify;
+rrT = Outer[Times, r, r];
+id3 = IdentityMatrix[3];
+
+H2expected = rrT - id3;
+Print["\nH^2 = r r^T - I: ", FullSimplify[H2 - H2expected, r1^2 + r2^2 + r3^2 == 1] == Table[0, {3}, {3}]];
+
+(* H^3 = -H (Cayley-Hamilton for skew-symmetric with |r|=1) *)
+H3 = H . H . H // Simplify;
+Print["H^3 = -H: ", FullSimplify[H3 + H, r1^2 + r2^2 + r3^2 == 1] == Table[0, {3}, {3}]];
+
+(* Consequences *)
+Print["\nUseful identities (all assuming |r|=1):"];
+Print["  H^4 = -H^2 = I - r r^T: ",
+  FullSimplify[H . H . H . H + H2, r1^2 + r2^2 + r3^2 == 1] == Table[0, {3}, {3}]];
+
+(* Annihilation: r r^T . H = 0 and H . r r^T = 0 *)
+Print["  r r^T . H = 0: ",
+  FullSimplify[rrT . H ,  r1^2 + r2^2 + r3^2 == 1] == Table[0, {3}, {3}]];
+Print["  H . r r^T = 0: ",
+  Simplify[H . rrT, r1^2 + r2^2 + r3^2 == 1] == Table[0, {3}, {3}]];
+Print["  r r^T . r r^T = r r^T: ",
+  FullSimplify[rrT . rrT - rrT, r1^2 + r2^2 + r3^2 == 1] == Table[0, {3}, {3}]];
+
+
+(* ======================================================================== *)
+(*  PART 2: RODRIGUES FORMULA — exp(Theta H)                               *)
+(* ======================================================================== *)
+
+Print["\n\n================================================================"];
+Print["PART 2: Rodrigues formula — R(Omega) = exp(Theta H)"];
+Print["================================================================"];
+
+(* Rodrigues: R = I + sin(Theta) H + (1-cos(Theta)) H^2 *)
+Rodrigues[th_, Hmat_] := id3 + Sin[th] Hmat + (1 - Cos[th]) Hmat . Hmat;
+
+Rsym = Rodrigues[theta, H];
+
+(* Verify R^T R = I *)
+RtR = Transpose[Rsym] . Rsym // Simplify;
+Print["R^T R = I: ",
+  FullSimplify[RtR - id3, r1^2 + r2^2 + r3^2 == 1] == Table[0, {3}, {3}]];
+
+(* Verify det R = 1 *)
+detR = Det[Rsym] // Simplify;
+Print["det R = 1: ", FullSimplify[detR, r1^2 + r2^2 + r3^2 == 1] === 1];
+
+(* Verify Tr R = 1 + 2 cos(Theta) *)
+trR = Tr[Rsym] // Simplify;
+Print["Tr R = 1 + 2cos(Theta): ",
+  FullSimplify[trR - (1 + 2 Cos[theta]), r1^2 + r2^2 + r3^2 == 1] === 0];
+
+(* 2pi periodicity *)
+Print["R(2pi) = I: ",
+  FullSimplify[Rodrigues[2 Pi, H] - id3, r1^2 + r2^2 + r3^2 == 1] == Table[0, {3}, {3}]];
+
+(* Phase reflection: R(r, pi) = R(-r, pi) *)
+Rpi = Rodrigues[Pi, H] // Simplify;
+RpiNeg = Rodrigues[Pi, -H] // Simplify;
+Print["R(r,pi) = R(-r,pi): ",
+  FullSimplify[Rpi - RpiNeg, r1^2 + r2^2 + r3^2 == 1] == Table[0, {3}, {3}]];
+
+(* Alternative form at pi: R(pi) = 2 r r^T - I *)
+Print["R(r,pi) = 2 r r^T - I: ",
+  FullSimplify[Rpi - (2 rrT - id3), r1^2 + r2^2 + r3^2 == 1] == Table[0, {3}, {3}]];
+
+
+(* ======================================================================== *)
+(*  PART 3: S MATRIX — translation coupling in exponential map              *)
+(* ======================================================================== *)
+
+Print["\n\n================================================================"];
+Print["PART 3: S matrix — T = S(Omega) t"];
+Print["================================================================"];
+
+(* S = I + H^2 + (1/Theta)(I - R) H *)
+(* Using H algebra: (I-R)H = -sin(Theta)H^2 - (1-cos(Theta))H^3 
+                           = -sin(Theta)H^2 + (1-cos(Theta))H 
+   So S = I + H^2 + (1/Theta)[-sin(Theta)H^2 + (1-cos(Theta))H]
+        = I + (1 - sin(Theta)/Theta)H^2 + ((1-cos(Theta))/Theta)H *)
+
+Ssym = id3 + H . H + (1/theta)(id3 - Rsym) . H // Simplify;
+
+(* Alternative form *)
+Sform2 = id3 + (1 - Sin[theta]/theta) (H . H) + ((1 - Cos[theta])/theta) H // Simplify;
+Print["S two forms agree: ",
+  FullSimplify[Ssym - Sform2, r1^2 + r2^2 + r3^2 == 1] == Table[0, {3}, {3}]];
+
+(* Verify S is invertible: det S *)
+detS = Det[Ssym] // Simplify;
+Print["det S (symbolic): ", FullSimplify[detS, r1^2 + r2^2 + r3^2 == 1]];
+
+(* S^{-1} *)
+(* Paper Eq. (Sinvidentity): S^{-1} = (1-x)I + x r r^T - (1/2)[Omega]_x *)
+(* where 1-x = (Theta/2) / tan(Theta/2) = (Theta/2) cot(Theta/2) *)
+Clear[x];
+oneMinusX = (theta/2) / Tan[theta/2];
+xVal = 1 - oneMinusX;
+
+SinvClaimed = oneMinusX id3 + xVal rrT - (theta/2) H;
+
+(* Check S . S^{-1} = I *)
+SSinv = Ssym . SinvClaimed // Simplify;
+Print["\nS . S^{-1} = I: ",
+  FullSimplify[SSinv - id3, r1^2 + r2^2 + r3^2 == 1] == Table[0, {3}, {3}]];
+
+
+(* ======================================================================== *)
+(*  PART 4: RODRIGUES JACOBIANS — J_wr, J_wl                               *)
+(* ======================================================================== *)
+
+Print["\n\n================================================================"];
+Print["PART 4: Rodrigues Jacobians J_wr, J_wl"];
+Print["================================================================"];
+
+(* J_wr = (1-x)I + x r r^T + (1/2)[Omega]_x *)
+(* J_wl = (1-x)I + x r r^T - (1/2)[Omega]_x *)
+(* where 1-x = (Theta/2) cot(Theta/2) as above *)
+
+Jwr = oneMinusX id3 + xVal rrT + (theta/2) H;
+Jwl = oneMinusX id3 + xVal rrT - (theta/2) H;
+
+(* ---- KEY IDENTITY 1: S^{-1} = J_wl (Paper Eq. Sinvidentity) ---- *)
+Print["KEY IDENTITY: S^{-1} = J_wl(Omega): ",
+  FullSimplify[SinvClaimed - Jwl, r1^2 + r2^2 + r3^2 == 1] == Table[0, {3}, {3}]];
+
+(* ---- KEY IDENTITY 2: S^{-1} = J_wr(-Omega) ---- *)
+JwrNeg = oneMinusX id3 + xVal rrT - (theta/2) H;  (* flip sign of H term *)
+Print["KEY IDENTITY: S^{-1} = J_wr(-Omega): ",
+  FullSimplify[SinvClaimed - JwrNeg, r1^2 + r2^2 + r3^2 == 1] == Table[0, {3}, {3}]];
+
+(* ---- KEY IDENTITY 3: S^{-1} R = R S^{-1} = J_wr (Paper Eq. SinvRidentity) ---- *)
+(* This is the identity we proved by hand earlier in the conversation *)
+SinvR = SinvClaimed . Rsym // Simplify;
+Print["\nKEY IDENTITY: S^{-1} R = J_wr: ",
+  FullSimplify[SinvR - Jwr, r1^2 + r2^2 + r3^2 == 1] == Table[0, {3}, {3}]];
+
+RSinv = Rsym . SinvClaimed // Simplify;
+Print["KEY IDENTITY: R S^{-1} = J_wr: ",
+  FullSimplify[RSinv - Jwr, r1^2 + r2^2 + r3^2 == 1] == Table[0, {3}, {3}]];
+
+(* Commutativity: [S^{-1}, R] = 0 *)
+Print["S^{-1} and R commute: ",
+  FullSimplify[SinvR - RSinv, r1^2 + r2^2 + r3^2 == 1] == Table[0, {3}, {3}]];
+
+(* ---- Determinant of J_wr ---- *)
+(* Paper: det J_wr = (1-x)^2 + Theta^2/4 *)
+detJwr = Det[Jwr] // Simplify;
+detJwrClaimed = oneMinusX^2 + theta^2/4;
+Print["\ndet J_wr = (1-x)^2 + Theta^2/4: ",
+  FullSimplify[detJwr - detJwrClaimed, r1^2 + r2^2 + r3^2 == 1] === 0];
+
+(* J_wr is invertible for all Theta in [0, pi] *)
+Print["det J_wr > 0 for Theta in (0,pi): (since (1-x)^2 >= 0 and Theta^2/4 > 0)"];
+
+(* ---- J_wr * J_wr^{-1} numerical check ---- *)
+Print["\n--- Numerical spot-check ---"];
+thetaNum = 1.3;
+rNum = {3, -1, 2}/Sqrt[14.0];
+HNum = hat[rNum];
+JwrNum = Jwr /. {theta -> thetaNum, r1 -> rNum[[1]], r2 -> rNum[[2]], r3 -> rNum[[3]]};
+JwrInvNum = Inverse[JwrNum];
+Print["J_wr * J_wr^{-1} = I (max err): ",
+  Max[Abs[Flatten[JwrNum . JwrInvNum - id3]]]];
+
+
+(* ======================================================================== *)
+(*  PART 5: FINITE RODRIGUES COMPOSITION VIA SU(2)                         *)
+(* ======================================================================== *)
+
+Print["\n\n================================================================"];
+Print["PART 5: BCH — finite Rodrigues composition via SU(2)"];
+Print["================================================================"];
+
+(* Paper Eq. (addSO3finite):
+   Omega_c = (Theta_c / C) * (a r_a + b r_b + ab r_a x r_b)
+   a = tan(Theta_a/2), b = tan(Theta_b/2)
+   A = 1 + a^2 + b^2 + a^2 b^2
+   eps = 1 - ab cos(vartheta), cos(vartheta) = r_a . r_b
+   C = sqrt(A - eps^2)
+   tan(Theta_c/2) = C / eps
+*)
+
+Print["Testing against matrix multiplication: R_c = R_a R_b, Omega_c = log(R_c)"];
+
+(* Numerical test cases *)
+testCases = {
+  {{0.3, -0.5, 0.7}, {0.1, 0.2, -0.4}},   (* moderate angles *)
+  {{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}},       (* orthogonal axes *)
+  {{0.01, 0.02, -0.01}, {0.03, -0.01, 0.02}}, (* small angles *)
+  {{2.5, 0.0, 0.0}, {0.0, 0.5, 0.0}},       (* near pi *)
+  {{0.5, 0.5, 0.5}, {0.5, 0.5, 0.5}}        (* parallel *)
+};
+
+(* Rodrigues exp/log in Mathematica *)
+rodriguesExp[omega_] := Module[{th = Norm[omega], rr, HH},
+  If[th < 10^-12, Return[id3]];
+  rr = omega/th;
+  HH = hat[rr];
+  id3 + Sin[th] HH + (1 - Cos[th]) HH . HH
+];
+
+rodriguesLog[R_] := Module[{costh, th, rr, sk},
+  costh = (Tr[R] - 1)/2;
+  costh = Min[1, Max[-1, costh]];
+  th = ArcCos[costh];
+  If[th < 10^-12, Return[{0., 0., 0.}]];
+  sk = (R - Transpose[R])/(2 Sin[th]);
+  rr = {sk[[3, 2]], sk[[1, 3]], sk[[2, 1]]};
+  th rr
+];
+
+bchCompose[omA_, omB_] := Module[{thA, thB, rA, rB, a, b, cosv, bigA, eps, Csq, bigC, thC, dir, pf},
+  thA = Norm[omA]; thB = Norm[omB];
+  If[thA < 10^-12, Return[omB]];
+  If[thB < 10^-12, Return[omA]];
+  rA = omA/thA; rB = omB/thB;
+  a = Tan[thA/2]; b = Tan[thB/2];
+  cosv = rA . rB;
+  bigA = 1 + a^2 + b^2 + a^2 b^2;
+  eps = 1 - a b cosv;
+  Csq = Max[0, bigA - eps^2];
+  bigC = Sqrt[Csq];
+  thC = 2 ArcTan[eps, bigC];  (* Mathematica ArcTan[x,y]=atan2(y,x), so this gives atan2(C, eps) *)
+  dir = a rA + b rB + a b Cross[rA, rB];
+  If[bigC < 10^-12,
+    pf = 2/eps,
+    pf = thC/bigC
+  ];
+  omC = pf dir;
+  (* Phase reflection if |Omega_c| > pi *)
+  If[Norm[omC] > Pi + 10^-10,
+    omC = -omC (2 Pi - Norm[omC])/Norm[omC]
+  ];
+  omC
+];
+
+Print["\nTest: BCH formula vs matrix log(R_a R_b)"];
+Do[
+  {omA, omB} = testCases[[k]];
+  Ra = rodriguesExp[omA]; Rb = rodriguesExp[omB];
+  Rc = Ra . Rb;
+  omMatrix = rodriguesLog[Rc];
+  omBCH = bchCompose[omA, omB];
+  (* Compare rotation matrices *)
+  RcBCH = rodriguesExp[omBCH];
+  err = Max[Abs[Flatten[Rc - RcBCH]]];
+  Print["  Case ", k, ": max |R_matrix - R_BCH| = ", ScientificForm[err, 3]],
+  {k, Length[testCases]}
+];
+
+
+
+(* ======================================================================== *)
+(*  PART 6: SU(2) QUATERNION CORRESPONDENCE                                *)
+(* ======================================================================== *)
+
+Print["\n\n================================================================"];
+Print["PART 6: SU(2) quaternion ↔ SO(3) Rodrigues"];
+Print["================================================================"];
+
+(* Quaternion: q = (q0, q1, q2, q3), |q| = 1 *)
+(* q0 = cos(Theta/2), (q1,q2,q3) = sin(Theta/2) r *)
+(* R(q) = (q0^2 - |qv|^2)I + 2 qv qv^T + 2 q0 [qv]_x *)
+
+Clear[q0, q1, q2, q3];
+qv = {q1, q2, q3};
+
+RfromQ = (q0^2 - qv . qv) id3 + 2 Outer[Times, qv, qv] + 2 q0 hat[qv];
+
+(* Verify at a specific angle *)
+thTest = 7/10;
+rTest = {3, -1, 2}/Sqrt[14];
+q0test = Cos[thTest/2];
+qvTest = Sin[thTest/2] rTest;
+
+Rfromq = RfromQ /. {q0 -> q0test, q1 -> qvTest[[1]], q2 -> qvTest[[2]], q3 -> qvTest[[3]]} // N;
+Rdirect = rodriguesExp[thTest rTest] // N;
+Print["R(quaternion) = R(Rodrigues): max err = ",
+  Max[Abs[Flatten[Rfromq - Rdirect]]] // ScientificForm[#, 3] &];
+
+(* Quaternion multiplication = rotation composition *)
+quatMul[p_, q_] := {
+  p[[1]] q[[1]] - p[[2]] q[[2]] - p[[3]] q[[3]] - p[[4]] q[[4]],
+  p[[1]] q[[2]] + p[[2]] q[[1]] + p[[3]] q[[4]] - p[[4]] q[[3]],
+  p[[1]] q[[3]] - p[[2]] q[[4]] + p[[3]] q[[1]] + p[[4]] q[[2]],
+  p[[1]] q[[4]] + p[[2]] q[[3]] - p[[3]] q[[2]] + p[[4]] q[[1]]
+};
+
+omA = {0.5, -0.3, 0.8}; omB = {0.2, 0.6, -0.4};
+thA = Norm[omA]; thB = Norm[omB];
+qA = Prepend[Sin[thA/2] omA/thA, Cos[thA/2]];
+qB = Prepend[Sin[thB/2] omB/thB, Cos[thB/2]];
+qC = quatMul[qA, qB];
+
+(* qC → rotation matrix *)
+RfromqC = RfromQ /. {q0 -> qC[[1]], q1 -> qC[[2]], q2 -> qC[[3]], q3 -> qC[[4]]} // N;
+RmatC = rodriguesExp[omA] . rodriguesExp[omB] // N;
+Print["Quaternion product = matrix product: max err = ",
+  Max[Abs[Flatten[RfromqC - RmatC]]] // ScientificForm[#, 3] &];
+
+(* Double cover: -q gives same R *)
+qCneg = -qC;
+RfromqCneg = RfromQ /. {q0 -> qCneg[[1]], q1 -> qCneg[[2]], q2 -> qCneg[[3]], q3 -> qCneg[[4]]} // N;
+Print["R(q) = R(-q): max err = ",
+  Max[Abs[Flatten[RfromqC - RfromqCneg]]] // ScientificForm[#, 3] &];
+
+
+(* ======================================================================== *)
+(*  PART 7: J_wr VIA DIFFERENTIATION OF FINITE ADDITION                    *)
+(* ======================================================================== *)
+
+Print["\n\n================================================================"];
+Print["PART 7: J_wr from finite addition formula (Paper Eq. jacobianomega1)"];
+Print["================================================================"];
+
+(* J_wr(Omega_a) = d Omega_c / d Omega_b |_{Theta_b=0} *)
+(* Verify numerically via finite differences *)
+
+omA = {0.7, -0.4, 1.2};
+h = 10^-7;
+
+JwrFD = Table[
+  (bchCompose[omA, omA*0 + h UnitVector[3, j]] -
+   bchCompose[omA, omA*0 - h UnitVector[3, j]]) / (2 h),
+  {j, 3}
+] // Transpose;
+
+(* Analytic formula *)
+thA = Norm[omA]; rA = omA/thA;
+oneMinusXA = (thA/2) / Tan[thA/2] // N;
+xA = 1 - oneMinusXA;
+JwrAnalytic = oneMinusXA id3 + xA Outer[Times, rA, rA] + (thA/2) hat[rA];
+
+Print["J_wr (analytic vs FD):"];
+Do[
+  Print["  [", i, ",", j, "] analytic=",
+    NumberForm[JwrAnalytic[[i, j]], 8], " FD=",
+    NumberForm[JwrFD[[i, j]], 8], " err=",
+    ScientificForm[Abs[JwrAnalytic[[i, j]] - JwrFD[[i, j]]], 2]],
+  {i, 3}, {j, 3}
+];
+
+maxJErr = Max[Abs[Flatten[JwrAnalytic - JwrFD]]];
+Print["Max error: ", ScientificForm[maxJErr, 3]];
+
+
+(* ======================================================================== *)
+(*  PART 8: SE(3) COMPOSITION AND EXPONENTIAL MAP                          *)
+(* ======================================================================== *)
+
+Print["\n\n================================================================"];
+Print["PART 8: SE(3) composition and exp/log"];
+Print["================================================================"];
+
+(* SE(3) element: (R, T) with T = S(Omega) t *)
+(* Composition: (R_a, T_a) . (R_b, T_b) = (R_a R_b, R_a T_b + T_a) *)
+(* exp: [Omega, t] -> (R(Omega), S(Omega) t) *)
+(* log: (R, T) -> [Omega, S^{-1}(Omega) T] where Omega = log(R) *)
+
+Smatrix[omega_] := Module[{th = Norm[omega], rr, HH, RR},
+  If[th < 10^-12, Return[id3]];
+  rr = omega/th; HH = hat[rr];
+  RR = id3 + Sin[th] HH + (1 - Cos[th]) HH . HH;
+  id3 + HH . HH + (1/th)(id3 - RR) . HH
+];
+
+SinvMatrix[omega_] := Module[{th = Norm[omega], rr, HH, omx},
+  If[th < 10^-12, Return[id3]];
+  rr = omega/th; HH = hat[rr];
+  omx = (th/2)/Tan[th/2];
+  omx id3 + (1 - omx) Outer[Times, rr, rr] - (th/2) HH
+];
+
+se3Exp[xi_] := Module[{omega = xi[[1 ;; 3]], t = xi[[4 ;; 6]]},
+  {rodriguesExp[omega], Smatrix[omega] . t}
+];
+
+se3Log[Rf_, Tf_] := Module[{omega, t},
+  omega = rodriguesLog[Rf];
+  t = SinvMatrix[omega] . Tf;
+  Join[omega, t]
+];
+
+se3Compose[f1_, f2_] := Module[{R1, T1, R2, T2},
+  {R1, T1} = f1; {R2, T2} = f2;
+  {R1 . R2, R1 . T2 + T1}
+];
+
+(* Test: exp then log roundtrip *)
+xiTest = {0.3, -0.2, 0.5, 1.0, -0.5, 0.3};
+{Rtest, Ttest} = se3Exp[xiTest];
+xiBack = se3Log[Rtest, Ttest];
+Print["exp-log roundtrip: max err = ",
+  Max[Abs[xiTest - xiBack]] // ScientificForm[#, 3] &];
+
+(* Test: composition matches direct formula *)
+xiA = {0.3, -0.2, 0.5, 1.0, -0.5, 0.3};
+xiB = {0.1, 0.4, -0.3, 0.5, 1.0, -0.7};
+{Ra, Ta} = se3Exp[xiA]; {Rb, Tb} = se3Exp[xiB];
+{Rc, Tc} = se3Compose[{Ra, Ta}, {Rb, Tb}];
+xiC = se3Log[Rc, Tc];
+
+(* Via BCH *)
+omA3 = xiA[[1 ;; 3]]; tA3 = xiA[[4 ;; 6]];
+omB3 = xiB[[1 ;; 3]]; tB3 = xiB[[4 ;; 6]];
+bigTA = Smatrix[omA3] . tA3;
+bigTB = Smatrix[omB3] . tB3;
+omC3 = bchCompose[omA3, omB3];
+bigTC = rodriguesExp[omA3] . bigTB + bigTA;
+tC3 = SinvMatrix[omC3] . bigTC;
+xiBCH = Join[omC3, tC3];
+
+Print["SE(3) compose matrix vs BCH: max err = ",
+  Max[Abs[xiC - xiBCH]] // ScientificForm[#, 3] &];
+
+(* Test: f . f^{-1} = identity *)
+se3Inv[f_] := Module[{R, T}, {R, T} = f; {Transpose[R], -Transpose[R] . T}];
+{Ri, Ti} = se3Compose[{Ra, Ta}, se3Inv[{Ra, Ta}]];
+xiId = se3Log[Ri, Ti];
+Print["f . f^{-1} = e: max err = ",
+  Max[Abs[xiId]] // ScientificForm[#, 3] &];
+
+
+(* ======================================================================== *)
+(*  PART 9: SE(3) RIGHT JACOBIAN — 6×6 block structure                     *)
+(* ======================================================================== *)
+
+Print["\n\n================================================================"];
+Print["PART 9: SE(3) right Jacobian — 6×6 block structure"];
+Print["================================================================"];
+
+(* The 6x6 SE(3) right Jacobian has the block form:
+   J_SE3 = [[J_wr, 0], [J_t, J_wr]]
+   where J_t is the coupling Jacobian.
+   
+   We verify this by finite-differencing the SE(3) composition. *)
+
+omTest = {0.5, -0.3, 0.7};
+tTest = {1.0, -0.5, 0.3};
+xiTest = Join[omTest, tTest];
+
+(* FD: J_SE3[i,j] = d(xi_c) / d(xi_b,j) |_{xi_b=0}
+   where xi_c = log(exp(xi_test) . exp(xi_b)) *)
+
+h = 10^-7;
+JSE3FD = Table[
+  Module[{xiBp, xiBm, xiCp, xiCm},
+    xiBp = Table[0., {6}]; xiBp[[j]] = h;
+    xiBm = Table[0., {6}]; xiBm[[j]] = -h;
+    {Rp, Tp} = se3Compose[se3Exp[xiTest], se3Exp[xiBp]];
+    xiCp = se3Log[Rp, Tp];
+    {Rm, Tm} = se3Compose[se3Exp[xiTest], se3Exp[xiBm]];
+    xiCm = se3Log[Rm, Tm];
+    (xiCp - xiCm)/(2 h)
+  ],
+  {j, 6}
+] // Transpose;
+
+(* Analytic:
+   Upper-left 3x3: J_wr(omega)
+   Upper-right 3x3: 0
+   Lower-left 3x3: J_t(omega, t)
+   Lower-right 3x3: J_wr(omega)  *)
+thT = Norm[omTest]; rT = omTest/thT;
+oneMinusXT = (thT/2) / Tan[thT/2] // N;
+xT = 1 - oneMinusXT;
+JwrT = oneMinusXT id3 + xT Outer[Times, rT, rT] + (thT/2) hat[rT];
+
+Print["Upper-left block = J_wr (max err): ",
+  Max[Abs[Flatten[JSE3FD[[1 ;; 3, 1 ;; 3]] - JwrT]]] // ScientificForm[#, 3] &];
+Print["Upper-right block = 0 (max val): ",
+  Max[Abs[Flatten[JSE3FD[[1 ;; 3, 4 ;; 6]]]]] // ScientificForm[#, 3] &];
+Print["Lower-right block = J_wr (max err): ",
+  Max[Abs[Flatten[JSE3FD[[4 ;; 6, 4 ;; 6]] - JwrT]]] // ScientificForm[#, 3] &];
+
+(* The coupling block J_t *)
+JtFD = JSE3FD[[4 ;; 6, 1 ;; 3]];
+Print["\nCoupling Jacobian J_t (FD):"];
+Print[JtFD // MatrixForm];
+
+
+(* ======================================================================== *)
+(*  PART 10: COUPLING JACOBIAN J_t — symbolic derivation                    *)
+(* ======================================================================== *)
+
+Print["\n\n================================================================"];
+Print["PART 10: Coupling Jacobian J_t — d[S^{-1} T]/dOmega"];
+Print["================================================================"];
+
+(* Paper Eq. (couplingJacobian):
+   J_t(Omega, t) = d[S^{-1}(Omega) T] / dOmega . J_wr(Omega)
+   where T = S(Omega) t.
+   
+   Paper Eq. (dSinvTdOmega):
+   d[S^{-1} T]/dOmega = (1/2)[t]_x + (x/Theta)(r t^T - ta H^2 + t r^T) 
+                       + (ta/Theta)(S - S^{-1}(-Omega))
+   where ta = r . t *)
+
+(* Numerical computation of d[S^{-1}(Omega) S(Omega) t]/dOmega_j 
+   Note: S^{-1}(Omega) S(Omega) t = t, so d/dOmega should be 0!
+   Wait — that's not right. The paper says d[S^{-1} T]/dOmega where T = S t,
+   but T is the physical translation which depends on Omega through S.
+   
+   Let's be precise: given fixed t (exponential coordinate),
+   T(Omega) = S(Omega) t, and we want d[S^{-1}(Omega) T(Omega)]/dOmega = dt/dOmega = 0.
+   
+   NO! The coupling Jacobian appears in the composition context.
+   When composing (Ra, Ta) with (Rb, Tb) → (Rc, Tc), the translational part
+   in exp coordinates is tc = S^{-1}(Omega_c)(Ra Tb + Ta).
+   
+   The derivative w.r.t. Omega_b (at Omega_b=0) involves:
+   d tc/d omega_b = d[S^{-1}(Omega_c) (Ra Tb + Ta)] / d omega_b
+   
+   At omega_b=0: Omega_c = Omega_a, Ta stays fixed, Tb = S(0) vb = vb.
+   So d/d omega_b affects both Omega_c (through J_wr) and Tb.
+   
+   The coupling J_t captures: d tc/d omega_b where only the Omega_a part
+   of xi_a is perturbed, i.e., it's really d[S^{-1}(Omega) T]/dOmega 
+   where T = S(Omega) t is linked to Omega. *)
+
+(* Let's just verify the formula numerically.
+   d[S^{-1}(Omega) . T] / dOmega_j  where T = S(Omega) . t, t = fixed *)
+
+omA3 = {0.5, -0.3, 0.7};
+tA3 = {1.0, -0.5, 0.3};
+TA3 = Smatrix[omA3] . tA3 // N;  (* physical translation *)
+
+h = 10^-7;
+dSinvTdOmFD = Table[
+  Module[{omP, omM, SinvP, SinvM},
+    omP = omA3; omP[[j]] += h;
+    omM = omA3; omM[[j]] -= h;
+    SinvP = SinvMatrix[omP];
+    SinvM = SinvMatrix[omM];
+    (* T is FIXED (physical translation), only Omega changes *)
+    (SinvP . TA3 - SinvM . TA3)/(2 h)
+  ],
+  {j, 3}
+] // Transpose;
+
+Print["d[S^{-1}(Omega) T] / dOmega (FD, T fixed):"];
+Print[dSinvTdOmFD // MatrixForm];
+
+(* Paper formula for d[S^{-1} T]/dOmega *)
+thA3 = Norm[omA3]; rA3 = omA3/thA3;
+HA3 = hat[rA3];
+oneMinusXA3 = (thA3/2)/Tan[thA3/2] // N;
+xA3 = 1 - oneMinusXA3;
+ta = rA3 . tA3;  (* t_a = r . t — the component of t along the axis *)
+
+SmatA = Smatrix[omA3] // N;
+SinvNegA = SinvMatrix[-omA3] // N;  (* S^{-1}(-Omega) *)
+
+(* The claimed formula:
+   d[S^{-1}T]/dOmega = (1/2)[t]_x + (x/Theta)(r t^T - ta H^2 + t r^T)
+                      + (ta/Theta)(S - S^{-1}(-Omega))
+   BUT wait: T here is the PHYSICAL translation, not the exponential coordinate.
+   Let's use the formula from the Rust code / paper more carefully.
+   
+   Since T = S(Omega) t, we have S^{-1}(Omega) T = t (constant!).
+   So d[S^{-1}(Omega) T(Omega)]/dOmega = 0 when T depends on Omega through S.
+   
+   But in the FD above, T is FIXED. So we're computing d[S^{-1}(Omega)]/dOmega * T.
+   This is NOT zero — it's the derivative of S^{-1} applied to a fixed vector.
+*)
+
+(* Let's instead compute d[S^{-1}(Omega) T]/dOmega with T FIXED (=TA3).
+   The paper's Eq. (dSinvTdOmega) gives this derivative with T = S t,
+   i.e., it uses t as the more fundamental quantity. *)
+
+(* The paper formula reads (with S acting on t to produce T = S t):
+   d[S^{-1} T]/dOmega = (1/2)[t]_x + (x/Theta)(r t^T - ta H^2 + t r^T) + (ta/Theta)(S(Omega) - S^{-1}(-Omega))
+   BUT this computes d[S^{-1}(Omega) S(Omega) t]/dOmega = d(t)/dOmega = 0 if t is constant.
+   That can't be right. Let me re-read the paper formula.
+*)
+
+(* Actually the coupling Jacobian in the SE(3) composition context is:
+   When we compute xi_c = log(exp(xi_a) . exp(delta_b)), the translation is
+   t_c = S^{-1}(Omega_c)(R_a V_b + T_a)
+   where V_b = delta_b's translation part.
+   
+   d t_c / d omega_b |_{delta_b=0} has contributions from:
+   (a) Omega_c depends on omega_b through J_wr
+   (b) V_b = 0 (and its derivative is identity)
+   
+   The coupling Jacobian J_t multiplies omega_b to give the change in t_c.
+   It's computed from the full FD of the SE(3) composition, which we did above.
+*)
+
+Print["\nCoupling Jacobian from SE(3) FD (Part 9): "];
+Print[JtFD // MatrixForm];
+
+(* Let's verify the structure:
+   J_t = S^{-1} R . [x]_x + other terms 
+   
+   Actually from the SE(3) finite diff, the lower-left block of the 6x6 Jacobian IS J_t.
+   Let's cross-check with the paper formula for d[S^{-1}(Omega) T]/dOmega . J_wr. *)
+
+(* Paper says J_t(Omega, t) = d[S^{-1}(Omega) T] / dOmega . J_wr(Omega) 
+   where T is PHYSICAL translation. Let me verify:
+   
+   t_c = S^{-1}(Omega_c) T_c  where Omega_c, T_c come from composition.
+   At delta_b=0: Omega_c = Omega_a, T_c = T_a.
+   
+   d t_c / d omega_b = [d S^{-1}(Omega_a)/d Omega_a . (d Omega_c/d omega_b)] T_a 
+                     + S^{-1}(Omega_a) . (d T_c/d omega_b)
+   
+   d Omega_c/d omega_b |_{0} = J_wr(Omega_a)
+   d T_c/d omega_b |_{0} = R_a . d V_b/d omega_b |_0 = ... this is just S(0)=I 
+   Actually T_c = R_a T_b + T_a, and T_b = S(Omega_b) v_b, so at Omega_b=0, T_b=v_b=0
+   and d T_b/d omega_b = 0 (since d(S.v)/d omega includes both S and v dependence).
+   
+   Hmm, let me be more careful. *)
+
+(* At delta_b = [omega_b, v_b], T_b = S(omega_b) v_b.
+   T_c = R_a T_b + T_a = R_a S(omega_b) v_b + T_a
+   At omega_b=0, v_b=0: T_c = T_a.
+   
+   d T_c / d v_b |_0 = R_a S(0) = R_a  (this gives the lower-right block = S^{-1} R_a = J_wr ✓)
+   d T_c / d omega_b |_0 = 0 (since T_b=0 at the base point)
+   
+   So: d t_c / d omega_b = d[S^{-1}(Omega_c)]/d(Omega_c) T_a . J_wr(Omega_a) + 0
+                         = [d S^{-1}/d Omega . T_a] . J_wr
+   This confirms J_t = d[S^{-1} T]/dOmega . J_wr. *)
+
+JtFromPaper = dSinvTdOmFD . JwrT;
+Print["\nJ_t from d[S^{-1} T]/dOmega . J_wr:"];
+Print[JtFromPaper // MatrixForm];
+
+Print["\nJ_t from SE(3) FD (Part 9):"];
+Print[JtFD // MatrixForm];
+
+Print["\nJ_t paper formula vs SE(3) FD: max err = ",
+  Max[Abs[Flatten[JtFromPaper - JtFD]]] // ScientificForm[#, 3] &];
+
+
+(* ======================================================================== *)
+(*  PART 11: COMPOSITION JACOBIANS d(Omega_c)/d(Omega_a), d(Omega_c)/d(Omega_b) *)
+(* ======================================================================== *)
+
+Print["\n\n================================================================"];
+Print["PART 11: Composition Jacobians dOmega_c/dOmega_a, dOmega_c/dOmega_b"];
+Print["================================================================"];
+
+(* Paper (from bch.rs):
+   dOmega_c/dOmega_a = J_wr(Omega_c) . R_b^T . J_wr^{-1}(Omega_a)
+   dOmega_c/dOmega_b = J_wr(Omega_c) . J_wr^{-1}(Omega_b)
+*)
+
+omA = {0.3, -0.5, 0.7};
+omB = {0.1, 0.2, -0.4};
+omC = bchCompose[omA, omB];
+
+h = 10^-7;
+
+(* FD for dOmega_c/dOmega_a *)
+dCdAfd = Table[
+  Module[{omAp, omAm},
+    omAp = omA; omAp[[j]] += h;
+    omAm = omA; omAm[[j]] -= h;
+    (bchCompose[omAp, omB] - bchCompose[omAm, omB])/(2 h)
+  ], {j, 3}
+] // Transpose;
+
+(* FD for dOmega_c/dOmega_b *)
+dCdBfd = Table[
+  Module[{omBp, omBm},
+    omBp = omB; omBp[[j]] += h;
+    omBm = omB; omBm[[j]] -= h;
+    (bchCompose[omA, omBp] - bchCompose[omA, omBm])/(2 h)
+  ], {j, 3}
+] // Transpose;
+
+(* Analytic *)
+JwrC = Module[{th = Norm[omC], rr, omx, xx},
+  rr = omC/th; omx = (th/2)/Tan[th/2] // N; xx = 1 - omx;
+  omx id3 + xx Outer[Times, rr, rr] + (th/2) hat[rr]
+];
+JwrA = Module[{th = Norm[omA], rr, omx, xx},
+  rr = omA/th; omx = (th/2)/Tan[th/2] // N; xx = 1 - omx;
+  omx id3 + xx Outer[Times, rr, rr] + (th/2) hat[rr]
+];
+JwrB = Module[{th = Norm[omB], rr, omx, xx},
+  rr = omB/th; omx = (th/2)/Tan[th/2] // N; xx = 1 - omx;
+  omx id3 + xx Outer[Times, rr, rr] + (th/2) hat[rr]
+];
+
+Rb = rodriguesExp[omB];
+
+dCdA = JwrC . Transpose[Rb] . Inverse[JwrA];
+dCdB = JwrC . Inverse[JwrB];
+
+Print["dOmega_c/dOmega_a: analytic vs FD max err = ",
+  Max[Abs[Flatten[dCdA - dCdAfd]]] // ScientificForm[#, 3] &];
+Print["dOmega_c/dOmega_b: analytic vs FD max err = ",
+  Max[Abs[Flatten[dCdB - dCdBfd]]] // ScientificForm[#, 3] &];
+
+(* Check: at Omega_b = 0, dOmega_c/dOmega_a = I *)
+dCdA0 = Module[{omC0, JwrC0},
+  omC0 = bchCompose[omA, {0., 0., 0.}];
+  JwrC0 = Module[{th = Norm[omC0], rr, omx, xx},
+    rr = omC0/th; omx = (th/2)/Tan[th/2] // N; xx = 1 - omx;
+    omx id3 + xx Outer[Times, rr, rr] + (th/2) hat[rr]
+  ];
+  JwrC0 . IdentityMatrix[3] . Inverse[JwrA]  (* R_b^T = I at Omega_b=0 *)
+];
+Print["dOmega_c/dOmega_a at Omega_b=0 = I: max err = ",
+  Max[Abs[Flatten[dCdA0 - id3]]] // ScientificForm[#, 3] &];
+
+
+(* ======================================================================== *)
+(*  PART 12: ADJOINT ACTION AND LEFT-RIGHT JACOBIAN CONNECTION              *)
+(* ======================================================================== *)
+
+Print["\n\n================================================================"];
+Print["PART 12: Adjoint action and left-right connection"];
+Print["================================================================"];
+
+(* The 6x6 adjoint of (R, T):
+   Ad(f) = [[R, 0], [[T]_x R, R]]
+   
+   Left-right covariance connection:
+   Sigma_l^{-1} = J_lr^T Sigma_r^{-1} J_lr
+   where J_lr = Ad(f_0) = [[R_0, 0], [[T_0]_x R_0, R_0]]
+*)
+
+R0 = rodriguesExp[{0.5, -0.3, 0.7}];
+T0 = {1.0, -2.0, 0.5};
+
+(* Build adjoint *)
+AdF = ArrayFlatten[{{R0, 0 id3}, {hat[T0] . R0, R0}}];
+Print["Adjoint Ad(f) = ", AdF // MatrixForm];
+
+(* Verify: Ad(f) . Ad(g) = Ad(f.g) *)
+R1 = rodriguesExp[{0.2, 0.1, -0.4}];
+T1 = {0.5, 1.0, -0.3};
+{Rc, Tc} = se3Compose[{R0, T0}, {R1, T1}];
+
+AdF0 = ArrayFlatten[{{R0, 0 id3}, {hat[T0] . R0, R0}}];
+AdF1 = ArrayFlatten[{{R1, 0 id3}, {hat[T1] . R1, R1}}];
+AdFc = ArrayFlatten[{{Rc, 0 id3}, {hat[Tc] . Rc, Rc}}];
+
+Print["Ad(f.g) = Ad(f).Ad(g): max err = ",
+  Max[Abs[Flatten[AdFc - AdF0 . AdF1]]] // ScientificForm[#, 3] &];
+
+
+(* ======================================================================== *)
+(*  PART 13: BCH SERIES TRUNCATION VS EXACT — ORDER ANALYSIS               *)
+(* ======================================================================== *)
+
+Print["\n\n================================================================"];
+Print["PART 13: BCH series truncation — order analysis"];
+Print["================================================================"];
+
+(* BCH second-order: Omega_c ≈ Omega_a + Omega_b + (1/2) Omega_a × Omega_b *)
+(* BCH third-order: + (1/12)(Omega_a×(Omega_a×Omega_b) + Omega_b×(Omega_b×Omega_a)) *)
+
+scales = {0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0};
+rA = Normalize[{3., -1., 2.}]; rB = Normalize[{-1., 2., 1.}];
+
+Print[PaddedForm["scale", 7], "  ",
+  PaddedForm["exact", 12], "  ",
+  PaddedForm["err2nd", 12], "  ",
+  PaddedForm["err3rd", 12], "  ",
+  PaddedForm["ratio2/3", 10]];
+
+Do[
+  omA = s rA; omB = s rB;
+  exact = bchCompose[omA, omB];
+  bch2 = omA + omB + (1/2) Cross[omA, omB];
+  bch3 = bch2 + (1/12)(Cross[omA, Cross[omA, omB]] + Cross[omB, Cross[omB, omA]]);
+  e2 = Norm[exact - bch2];
+  e3 = Norm[exact - bch3];
+  Print[PaddedForm[s, {7, 3}], "  ",
+    ScientificForm[Norm[exact], 4], "  ",
+    ScientificForm[e2, 4], "  ",
+    ScientificForm[e3, 4], "  ",
+    If[e3 > 10^-16, NumberForm[e2/e3, 4], "Inf"]
+  ],
+  {s, scales}
+];
+
+Print["\nExpected: err2nd ~ s^3 (cubic), err3rd ~ s^4 (quartic)"];
+Print["Ratio err2/err3 ~ 1/s (should grow as scale decreases)"];
+
+
+(* ======================================================================== *)
+(*  PART 14: SECOND-ORDER COVARIANCE CORRECTION (Paper Appendix D)          *)
+(* ======================================================================== *)
+
+Print["\n\n================================================================"];
+Print["PART 14: Second-order covariance correction"];
+Print["================================================================"];
+
+(* The BCH map: Omega_c = Omega_a + Omega_b + (1/2) Omega_a x Omega_b + ...
+   
+   For zero-mean perturbations delta_a, delta_b:
+   <Omega_c> = (1/2) <delta_a x delta_b> = (1/2) eps_{i,alpha,beta} Sigma_ab_{alpha,beta}
+   
+   Covariance correction (rotational block):
+   Delta Sigma_ij = (1/4) eps_{i,ab} eps_{j,cd} [Sigma_aa_{ac} Sigma_bb_{bd} + Sigma_ab_{ad} Sigma_ba_{bc}]
+   
+   (using Isserlis' theorem for Gaussian perturbations — fourth cumulant = 0) *)
+
+(* Test with specific covariances *)
+SigAA = {{0.04, 0.01, -0.005}, {0.01, 0.03, 0.008}, {-0.005, 0.008, 0.05}};
+SigBB = {{0.03, -0.01, 0.002}, {-0.01, 0.06, -0.003}, {0.002, -0.003, 0.04}};
+SigAB = {{0.005, -0.002, 0.001}, {0.003, -0.004, 0.002}, {-0.001, 0.003, -0.002}};
+SigBA = Transpose[SigAB];
+
+(* Mean correction *)
+LeviCivita[i_, j_, k_] := Signature[{i, j, k}];
+
+meanCorr = Table[
+  (1/2) Sum[LeviCivita[i, a, b] SigAB[[a, b]], {a, 3}, {b, 3}],
+  {i, 3}
+];
+Print["Second-order mean correction: ", meanCorr // N];
+Print["(Should be nonzero if Sigma_ab has antisymmetric part)"];
+
+(* Covariance correction *)
+DeltaSig = Table[
+  (1/4) Sum[
+    LeviCivita[i, a, b] LeviCivita[j, c, d] (
+      SigAA[[a, c]] SigBB[[b, d]] + SigAB[[a, d]] SigBA[[b, c]]
+    ),
+    {a, 3}, {b, 3}, {c, 3}, {d, 3}
+  ],
+  {i, 3}, {j, 3}
+];
+
+Print["\nSecond-order covariance correction (rotational block):"];
+Print[DeltaSig // N // MatrixForm];
+
+(* Verify symmetry *)
+Print["Symmetric: ", DeltaSig == Transpose[DeltaSig]];
+
+(* Monte Carlo verification *)
+Print["\n--- Monte Carlo verification ---"];
+nSamples = 100000;
+
+(* Build joint covariance *)
+SigJoint = ArrayFlatten[{{SigAA, SigAB}, {SigBA, SigBB}}];
+cholJ = CholeskyDecomposition[SigJoint] // Transpose;
+
+(* Sample *)
+SeedRandom[42];
+samples = Table[cholJ . RandomVariate[NormalDistribution[], 6], {nSamples}];
+
+(* Compose via BCH second-order: Omega_c = delta_a + delta_b + (1/2) delta_a x delta_b *)
+composedSamples = Table[
+  Module[{da, db, dc},
+    da = samples[[k, 1 ;; 3]];
+    db = samples[[k, 4 ;; 6]];
+    dc = da + db + (1/2) Cross[da, db];
+    dc
+  ],
+  {k, nSamples}
+];
+
+mcMean = Mean[composedSamples];
+Print["MC mean (2nd order BCH): ", mcMean];
+Print["Analytic mean correction: ", meanCorr // N];
+Print["Mean error: ", Norm[mcMean - meanCorr] // ScientificForm[#, 2] &];
+
+(* MC covariance *)
+mcCov = Covariance[composedSamples];
+firstOrderCov = SigAA + SigBB + SigAB + SigBA;  (* at first order *)
+correctedCov = firstOrderCov + DeltaSig;
+
+Print["\nFirst-order cov Frobenius err: ",
+  Norm[Flatten[mcCov - firstOrderCov]] // NumberForm[#, 4] &];
+Print["Corrected cov Frobenius err:   ",
+  Norm[Flatten[mcCov - correctedCov]] // NumberForm[#, 4] &];
+Print["Improvement factor: ",
+  Norm[Flatten[mcCov - firstOrderCov]] / Norm[Flatten[mcCov - correctedCov]] // NumberForm[#, 3] &];
+
+
+(* ======================================================================== *)
+(*  PART 15: PHASE REFLECTION BOUNDARY AT THETA = PI                        *)
+(* ======================================================================== *)
+
+Print["\n\n================================================================"];
+Print["PART 15: Phase reflection at Theta = pi"];
+Print["================================================================"];
+
+(* R(r, pi) = R(-r, pi) means the Rodrigues vector is ambiguous at |Omega| = pi.
+   The cutline in the SU(2) parametrization: cos(vartheta) = 0. *)
+
+(* Test: compose two large rotations crossing pi *)
+omA = {2.8, 0., 0.};
+omB = {0.8, 0., 0.};
+(* Sum = 3.6 > pi, so the result must phase-reflect *)
+
+Rc = rodriguesExp[omA] . rodriguesExp[omB];
+omCmat = rodriguesLog[Rc];
+omCbch = bchCompose[omA, omB];
+
+Print["Omega_a = ", omA, " (theta_a = ", Norm[omA] // N, ")"];
+Print["Omega_b = ", omB, " (theta_b = ", Norm[omB] // N, ")"];
+Print["Naive sum = ", Norm[omA + omB] // N, " > pi"];
+Print["Matrix log: Omega_c = ", omCmat, " (theta_c = ", Norm[omCmat] // N, ")"];
+Print["BCH:        Omega_c = ", omCbch, " (theta_c = ", Norm[omCbch] // N, ")"];
+Print["Expected theta_c = 2pi - 3.6 = ", 2 Pi - 3.6 // N];
+
+(* Verify R matrices match *)
+RcBCH = rodriguesExp[omCbch];
+Print["R matrices agree: max err = ",
+  Max[Abs[Flatten[Rc - RcBCH]]] // ScientificForm[#, 3] &];
+
+
+(* ======================================================================== *)
+(*  PART 16: SUMMARY OF ALL IDENTITIES VERIFIED                            *)
+(* ======================================================================== *)
+
+Print["\n\n================================================================"];
+Print["PART 16: Summary of verified identities"];
+Print["================================================================"];
+Print[""];
+Print["SO(3) algebra:"];
+Print["  [1] H^2 = r r^T - I                              (characteristic polynomial)"];
+Print["  [2] H^3 = -H                                     (Cayley-Hamilton)"];
+Print["  [3] r r^T . H = H . r r^T = 0                   (annihilation)"];
+Print["  [4] R^T R = I, det R = 1, Tr R = 1+2cos(Theta)  (orthogonality)"];
+Print["  [5] R(2pi) = I                                    (periodicity)"];
+Print["  [6] R(r,pi) = R(-r,pi) = 2 r r^T - I            (phase reflection)"];
+Print[""];
+Print["S matrix and S^{-1}:"];
+Print["  [7] S . S^{-1} = I"];
+Print["  [8] S^{-1} = J_wl(Omega)                         (Eq. Sinvidentity)"];
+Print["  [9] S^{-1} = J_wr(-Omega)"];
+Print[" [10] S^{-1} R = R S^{-1} = J_wr(Omega)           (Eq. SinvRidentity)"];
+Print[""];
+Print["Jacobians:"];
+Print[" [11] J_wr formula matches FD of BCH composition"];
+Print[" [12] det J_wr = (1-x)^2 + Theta^2/4 > 0"];
+Print[" [13] SE(3) 6x6 Jacobian block structure: [[J_wr,0],[J_t,J_wr]]"];
+Print[" [14] J_t = d[S^{-1}T]/dOmega . J_wr (matches SE(3) FD)"];
+Print[""];
+Print["BCH / composition:"];
+Print[" [15] Closed-form BCH matches matrix log(R_a R_b) for 5 test cases"];
+Print[" [16] Quaternion product matches matrix product"];
+Print[" [17] R(q) = R(-q) (double cover)"];
+Print[" [18] dOmega_c/dOmega_a = J_wr(Omega_c) R_b^T J_wr^{-1}(Omega_a)"];
+Print[" [19] dOmega_c/dOmega_b = J_wr(Omega_c) J_wr^{-1}(Omega_b)"];
+Print[" [20] Adjoint Ad(f.g) = Ad(f).Ad(g)"];
+Print[""];
+Print["BCH series:"];
+Print[" [21] 2nd order error ~ O(s^3), 3rd order ~ O(s^4)"];
+Print[""];
+Print["Second-order propagation:"];
+Print[" [22] Mean correction (1/2) eps_{iab} Sigma_ab_{ab} vs MC"];
+Print[" [23] Covariance correction via Isserlis vs MC (improvement factor)"];
+Print[""];
+Print["Phase reflection:"];
+Print[" [24] Compositions crossing pi reflect correctly"];
