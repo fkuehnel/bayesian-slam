@@ -11,6 +11,9 @@
 \newcommand{\sinc}{\mathrm{sinc}\,}
 \newcommand{\bfomega}{\boldsymbol{\omega}}
 \newcommand{\bfOmega}{\boldsymbol{\Omega}}
+\newcommand{\bftau}{\boldsymbol{\tau}}
+\newcommand{\bfrho}{\boldsymbol{\rho}}
+\newcommand{\bftheta}{\boldsymbol{\theta}}
 \newcommand{\adj}[1]{\mathrm{ad}({#1})}
 \newcommand{\sfSigma}[1]{\mathsf{\Sigma}_\mathnormal{#1}}
 \newcommand{\Jg}{\mathsf{J}_\mathnormal{g_r}}
@@ -1967,6 +1970,153 @@ evaluated for landmark~$j$.
 This expression is optimized over $f \in SE(3)$ using the Gauss-Newton iteration 
 with compositive updates $f_{t+1} = f_t \cdot \exp(\Delta{\bf f}_t)$ as described 
 in Section~\ref{sec:saddlepoint}.
+
+
+%% ====================================================================
+\section{Notation Correspondence and Additional Identities}
+\label{app:correspondence}
+%% ====================================================================
+
+This appendix maps the conventions used in this paper to those
+of Sol\`{a} et al.~\cite{sola2018micro} (hereafter \emph{SDA}) and
+Barfoot~\cite{barfoot2024}, to assist readers familiar with
+either reference. We also collect three identities that, to our
+knowledge, do not appear in those works.
+
+\subsection{Block ordering convention}
+
+The fundamental difference is the ordering of the tangent vector.
+SDA writes
+\beq
+    \bftau^{\rm SDA} = \begin{bmatrix} \bfrho \\ \bftheta \end{bmatrix}
+    \quad\text{(translation first)},
+    \label{eq:sdatangent}
+\eeq
+whereas we write
+\beq
+    \bftau = \begin{bmatrix} \bfOmega \\ {\bf t} \end{bmatrix}
+    \quad\text{(rotation first)}.
+    \label{eq:ourtangent}
+\eeq
+The two are related by the $6\times 6$ block permutation
+$\mathsf{P} = \left[\begin{smallmatrix} \bf 0 & \mathsf{I}_3 \\ \mathsf{I}_3 & \bf 0 \end{smallmatrix}\right]$, i.e.\
+$\bftau = \mathsf{P}\,\bftau^{\rm SDA}$,
+with the identifications $\bftheta \leftrightarrow \bfOmega$ and
+$\bfrho \leftrightarrow {\bf t}$.
+All $6\times 6$ matrices $\mathsf{M}$ transform as
+$\mathsf{M} = \mathsf{P}\,\mathsf{M}^{\rm SDA}\,\mathsf{P}$.
+
+\subsection{Element-by-element correspondence}
+
+Table~\ref{tab:notation} collects the key objects.
+SDA uses the \emph{left} Jacobian as the primary form;
+we use the \emph{right} Jacobian and convert via
+$\mathsf{J}_r(\bftau) = \mathsf{J}_l(-\bftau)$.
+
+\begin{table*}[t]
+\centering
+\caption{Notation correspondence between Sol\`{a} et al.\ (SDA)/Barfoot
+and this paper. Block permutation $\mathsf{P}$ swaps the 3-block ordering.}
+\label{tab:notation}
+\renewcommand{\arraystretch}{1.35}
+\begin{tabular}{lllp{5.0cm}}
+\hline
+\textbf{Object} & \textbf{SDA / Barfoot} & \textbf{This paper} & \textbf{Relationship} \\
+\hline
+Group element & $\mathbf{M} = \bigl[\begin{smallmatrix} \mathbf{R} & \mathbf{t} \\ \mathbf{0} & 1 \end{smallmatrix}\bigr]$ & $f = (\mathsf{R}, \mathbf{T})$ & Identical, $\mathbf{t} = \mathbf{T}$ \\[3pt]
+Tangent vector & $\bftau = [\bfrho;\, \bftheta]$ & $\bftau = [\bfOmega;\, \mathbf{t}]$ & $\bftheta \leftrightarrow \bfOmega,\; \bfrho \leftrightarrow \mathbf{t}$; block swap \\[3pt]
+Left exp ($\mathsf{S}$ matrix) & $\mathbf{V}(\bftheta)$\, (SDA Eq.~174) & $\mathsf{S}(\bfOmega)$\, (\ref{eq:rodrigues}) & Identical formula: $\mathbf{V} = \mathsf{S}$ \\[3pt]
+SO(3) left Jacobian & $\mathbf{J}_l(\bftheta)$ & $\mathsf{J}_{\omega_l}(\bfOmega)$ & Identical \\[3pt]
+SO(3) right Jacobian & $\mathbf{J}_l(-\bftheta)$ & $\mathsf{J}_{\omega_r}(\bfOmega)$\, (\ref{eq:RodweinormanJ}) & Identical: $\mathsf{J}_{\omega_r}(\bfOmega) = \mathbf{J}_l(-\bftheta)$ \\[3pt]
+$6\times 6$ Adjoint & $\text{Ad}_\mathbf{M} = \bigl[\begin{smallmatrix} \mathbf{R} & [\mathbf{t}]_\times\mathbf{R} \\ 0 & \mathbf{R} \end{smallmatrix}\bigr]$\, (SDA Eq.~175) & $\mathsf{Ad}_f = \bigl[\begin{smallmatrix} \mathsf{R} & 0 \\ [\mathbf{T}]_\times\mathsf{R} & \mathsf{R} \end{smallmatrix}\bigr]$ & Block permutation: $\mathsf{Ad}_f = \mathsf{P}\,\text{Ad}_\mathbf{M}\,\mathsf{P}$ \\[3pt]
+$6\times 6$ left Jacobian &  $\mathbf{J}_l = \bigl[\begin{smallmatrix} \mathbf{J}_l(\bftheta) & \mathbf{Q}(\bfrho,\bftheta) \\ 0 & \mathbf{J}_l(\bftheta) \end{smallmatrix}\bigr]$\, (SDA Eq.~179a) & $\bigl[\begin{smallmatrix} \mathsf{J}_{\omega_l} & 0 \\ \mathsf{Q} & \mathsf{J}_{\omega_l} \end{smallmatrix}\bigr]$ & Block permutation \\[3pt]
+$6\times 6$ right Jacobian & $\mathbf{J}_l(-\bfrho,-\bftheta)$ & $\bigl[\begin{smallmatrix} \mathsf{J}_{\omega_r} & 0 \\ \mathsf{J}_t & \mathsf{J}_{\omega_r} \end{smallmatrix}\bigr]$\, (\ref{eq:SE3transport}) & Block permutation; $\mathsf{J}_t = \mathbf{Q}(-\bfrho,-\bftheta)$ \\[3pt]
+Coupling block & $\mathbf{Q}(\bfrho,\bftheta)$\, (Barfoot, SDA Eq.~180) & $\mathsf{J}_t(\bfOmega,\mathbf{t})$\, (\ref{eq:dSinvTdOmega}) & $\mathsf{J}_t(\bfOmega,\mathbf{t}) = \mathbf{Q}(-\mathbf{t},-\bfOmega)\,\mathsf{J}_{\omega_r}$ \\[3pt]
+Inversion Jacobian & $-\text{Ad}_\mathbf{M}$\, (SDA Eq.~176) & $-\mathsf{Ad}_f$ & Block permutation \\[3pt]
+Composition Jacobian & $\bigl[\begin{smallmatrix} \mathbf{R}_b^T & -\mathbf{R}_b^T[\mathbf{t}_b]_\times \\ 0 & \mathbf{R}_b^T \end{smallmatrix}\bigr]$\, (SDA Eq.~177) & $\bigl[\begin{smallmatrix} \mathsf{R}_b^T & 0 \\ -\mathsf{R}_b^T[\mathbf{T}_b]_\times & \mathsf{R}_b^T \end{smallmatrix}\bigr]$ & Block permutation \\[3pt]
+Point-action Jacobian & $[\mathsf{R},\; -\mathsf{R}[\mathbf{p}]_\times]$\, (SDA Eq.~182) & $[-\mathsf{R}[\mathbf{x}]_\times,\;\mathsf{I}]$\, (\ref{eq:pointfirstorder}) & Block swap; our form is in body frame \\[3pt]
+\hline
+\end{tabular}
+\end{table*}
+
+\subsection{Additional identities}
+\label{app:newidentities}
+
+The following identities, verified both symbolically (Mathematica)
+and numerically (Rust, 85+ tests), do not appear in~\cite{sola2018micro}
+or~\cite{barfoot2024}.
+
+\begin{enumerate}
+\item \textbf{$\mathsf{S}^{-1}$ coincides with the left Rodrigues
+Jacobian.}
+\beq
+    \mathsf{S}^{-1}(\bfOmega) = \mathsf{J}_{\omega_l}(\bfOmega)
+    = \mathsf{J}_{\omega_r}(-\bfOmega).
+    \label{eq:sinv_identity_app}
+\eeq
+This follows from the $SO(3)$ Cayley-Hamilton relation
+$\mathsf{H}(\mathsf{H}^2 + \mathsf{I})=0$ and is proven
+in~(\ref{eq:Sinvidentity}). It implies a useful corollary:
+\beq
+    \mathsf{S}^{-1}(\bfOmega)\,\mathsf{R}(\bfOmega) 
+    = \mathsf{R}(\bfOmega)\,\mathsf{S}^{-1}(\bfOmega)
+    = \mathsf{J}_{\omega_r}(\bfOmega),
+    \label{eq:sinvR_identity_app}
+\eeq
+which shows that $\mathsf{S}^{-1}$ and $\mathsf{R}$ commute,
+and their product is exactly the right Rodrigues Jacobian.
+
+\item \textbf{Determinant of $\mathsf{S}$.}
+\beq
+    \det \mathsf{S}(\bfOmega) = \frac{2(1-\cos\Theta)}{\Theta^2},
+    \qquad
+    \det \mathsf{S}^{-1} = \frac{\Theta^2}{2(1-\cos\Theta)}.
+    \label{eq:detS_app}
+\eeq
+This gives the exact volume element for the
+Lie-Cartan coordinate chart and is needed for the
+change-of-variables Jacobian in density transformations
+between $[\bfOmega, {\bf t}]$ and $[\bfOmega, \mathbf{T}]$
+coordinates. The formula is continuous at $\Theta=0$
+($\det\mathsf{S} \to 1$) and vanishes at $\Theta=\pi$.
+
+\item \textbf{Compact coupling Jacobian (T-form).}
+The derivative $\partial[\mathsf{S}^{-1}\mathbf{T}]/\partial\bfOmega$
+with the physical translation $\mathbf{T}$ held fixed admits the
+closed form~(\ref{eq:dSinvTdOmega}), restated here:
+\beq
+    \frac{\partial[\mathsf{S}^{-1}\mathbf{T}]}{\partial\bfOmega} =
+    \tfrac{1}{2}[\mathbf{T}]_\times + \tfrac{x}{\Theta}\,\mathbf{r}\mathbf{T}^T
+    + \alpha\,\mathbf{T}\mathbf{r}^T
+    + \bar T\!\left[\tfrac{x}{\Theta}\mathsf{I}
+    - \left(\tfrac{2x}{\Theta}+\alpha\right)\mathbf{r}\mathbf{r}^T\right],
+    \label{eq:Tform_app}
+\eeq
+where $\alpha = (\sin\Theta-\Theta)/(2(1-\cos\Theta))$.
+This is equivalent to the Barfoot $\mathbf{Q}$ matrix~\cite{barfoot2024}
+(SDA Eq.~180)---an expansion in iterated cross-products of
+$\bftheta_\times$ and $\bfrho_\times$---but 
+(\ref{eq:Tform_app}) requires only scalar coefficients and
+outer products, avoiding the combinatorial expansion. 
+The equivalence $\mathsf{J}_t = \mathbf{Q}(-\mathbf{t},-\bfOmega)\mathsf{J}_{\omega_r}$
+was proven symbolically in the companion Mathematica script
+(\texttt{CouplingJacobianDerivation.m}, Step~5: 
+$\text{Formula}_A(\mathbf{T}=\mathsf{S}\mathbf{t}) - 
+\text{Formula}_B(\mathbf{t}) = \mathbf{0}$).
+\end{enumerate}
+
+\begin{remark}[Practical impact]
+Identity~1 halves the cost of computing $\mathsf{S}^{-1}$: 
+one evaluates $\mathsf{J}_{\omega_l}$ (a well-optimized primitive 
+in any Lie-group library) rather than inverting $\mathsf{S}$ 
+numerically. Identity~2 gives the exact Jacobian determinant 
+needed whenever one transforms between first-kind coordinates 
+$[\bfOmega,\mathbf{t}]$ and second-kind coordinates 
+$[\bfOmega,\mathbf{T}]$---for instance, in computing normalizing 
+constants for saddlepoint corrections. Identity~3 replaces 
+Barfoot's four-line cross-product expansion with a single-line formula, 
+simplifying both implementation and symbolic verification.
+\end{remark}
 
 %% ====================================================================
 %% BIBLIOGRAPHY
