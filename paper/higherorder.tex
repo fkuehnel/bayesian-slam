@@ -1495,28 +1495,48 @@ to obtain an expression for $\mathsf{S}^{-1}(\bfOmega_a)$. As an interesting fac
     = \mathsf{J}_{\omega_r}(-\bfOmega_a) = \mathsf{J}_{\omega_l}(\bfOmega_a)\;.
     \label{eq:Sinvidentity}
 \end{multline}
+Since $\mathsf{S}^{-1} = \mathsf{J}_{\omega_l}$, the determinant
+of $\mathsf{S}^{-1}$ is $\det\mathsf{J}_{\omega_l} = (1-x)^2 + \Theta^2/4$,
+confirming invertibility for all $\Theta \in [0,\pi]$. This is
+consistent with~(\ref{eq:detS}): $\det\mathsf{S} = 2(1-\cos\Theta)/\Theta^2$
+and $\det\mathsf{S}^{-1} = \Theta^2/(2(1-\cos\Theta))$.
+
 Further, one can show that
 \beq
     \mathsf{S}^{-1}(\bfOmega_a)\mathsf{R}(\bfOmega_a) = \mathsf{R}(\bfOmega_a)\mathsf{S}^{-1}(\bfOmega_a) =
     \mathsf{J}_{\omega_r}(\bfOmega_a),
     \label{eq:SinvRidentity}
 \eeq
-A more detailed calculation for the coupling Jacobian $\mathsf{J}_{t_r}$ yields
+The coupling Jacobian $\mathsf{J}_{t_r}$ is defined by
 \beq
     \mathsf{J}_{t}(\bfOmega_a,{\bf t}_a) = {\partial [\mathsf{S}^{-1}(\bfOmega_a){\bf T}_a] \over
-    \partial \bfOmega_a} \, \mathsf{J}_{\omega_r}(\bfOmega_a),\quad {\bf T}_a = \mathsf{S}(\bfOmega_a) \, {\bf t}_a.
+    \partial \bfOmega_a} \, \mathsf{J}_{\omega_r}(\bfOmega_a),\quad {\bf T}_a = \mathsf{S}(\bfOmega_a) \, {\bf t}_a,
     \label{eq:couplingJacobian}
 \eeq
-We can show that
-\beqar
-    {\partial [\mathsf{S}^{-1}(\bfOmega_a){\bf T}_a] \over
-    \partial \bfOmega_a} & = &
-    {1\over 2}[{\bf t}_a]_\times+ {x\over\Theta_a}
-    \left( {\bf r}_a{\bf t}_a^T- t_a \;\mathsf{H}^2_a + {\bf t}_a{\bf r}_a^T \right) + \nonumber \\
-    && {t_a\over\Theta_a} (\mathsf{S}(\bfOmega_a)-\mathsf{S}^{-1}(-\bfOmega_a)),
+where the derivative $\partial[\mathsf{S}^{-1}(\bfOmega){\bf T}]/\partial\bfOmega$
+is taken with the \emph{physical translation} ${\bf T}$ held fixed
+and only $\bfOmega$ varying in $\mathsf{S}^{-1}$.
+Differentiating $\mathsf{S}^{-1}(\bfOmega)$ with respect to $\bfOmega$
+and applying to the fixed vector ${\bf T}$ yields:
+\begin{eqnarray}
+    \frac{\partial[\mathsf{S}^{-1}{\bf T}]}{\partial\bfOmega} &=&
+    \frac{1}{2}[{\bf T}]_\times + \frac{x}{\Theta}\,{\bf r}{\bf T}^T
+    + \alpha\,{\bf T}{\bf r}^T + \nonumber\\
+    && \bar T\!\left[\frac{x}{\Theta}\mathsf{I}
+    - \left(\frac{2x}{\Theta}+\alpha\right){\bf r}{\bf r}^T\right] \nonumber\\
+    &=& {1\over 2}[{\bf t}]_\times+ {x\over\Theta}
+    \left( {\bf r}{\bf t}^T- {\bar t} \;\mathsf{H}^2 + {\bf t}{\bf r}^T \right) + \nonumber \\
+    && {{\bar t}\over\Theta} (\mathsf{S}(\bfOmega)-\mathsf{S}^{-1}(-\bfOmega)),
     \label{eq:dSinvTdOmega}
-\eeqar
-with $ t_a = {\bf r}_a\cdot{\bf t}_a$, which finishes the discourse on the $SE(3)$ composition Jacobians.
+\end{eqnarray}
+where $\bar t = {\bf r}\cdot{\bf t}$ and $\bar T = {\bf r}\cdot{\bf T}$ is the axial component
+of ${\bf T}$ and
+\beq
+    \alpha = \frac{\sin\Theta - \Theta}{2(1-\cos\Theta)}
+    = -\frac{1}{2}\cot\frac{\Theta}{2} + \frac{1}{\Theta}\;.
+    \label{eq:alphadef}
+\eeq
+These results finish the discourse on the $SE(3)$ composition Jacobians.
 
 \subsection{Additive versus compositive derivative}
 \label{app:addvscomp}
