@@ -78,131 +78,110 @@ Bayesian inference, pose estimation, Rodrigues vector, Baker-Campbell-Hausdorff
 \section{Introduction}
 \label{sec:intro}
 %% ====================================================================
-
+ 
 Estimating the pose of a rigid body from noisy measurements is a 
 fundamental problem across robotics, computer vision, aerospace 
 navigation, and surgical guidance. The six-dimensional pose---three 
 for position, three for orientation---lives on the Special Euclidean 
 group $SE(3)$, a non-commutative Lie group whose curved geometry 
 complicates standard probabilistic inference.
-
+ 
 \subsection{Motivation and Problem Statement}
-
-Current state-of-the-art methods for pose estimation---whether 
-filtering-based (Extended Kalman Filters, Unscented Kalman Filters) 
-or optimization-based (bundle adjustment, factor graph SLAM)---rely 
-on two simplifying assumptions that limit their accuracy:
-
+ 
+Current methods for pose estimation---filtering-based 
+(EKF, UKF) or optimization-based (bundle adjustment, factor 
+graph SLAM)---rely on two simplifying assumptions that limit 
+their accuracy:
+ 
 \begin{enumerate}
 \item \emph{First-order linearization of uncertainty propagation.}
 When composing uncertain poses $\hat{f} = f_0 \cdot \Delta f$ 
 where $\Delta f$ is a random perturbation in exponential coordinates, 
 the covariance is transported using a first-order Jacobian. 
-On $SE(3)$, the non-trivial coupling between rotational and 
-translational degrees of freedom (the semi-direct product structure) 
-introduces systematic bias at first order that is often neglected.
-
-\item \emph{Gaussian approximation of inherently non-Gaussian posteriors.}
-When observations are projective (camera measurements), 
-the joint posterior over pose and 3D landmarks is non-Gaussian 
-in the pose parameters. Standard Laplace approximations 
-(equivalent to Gauss-Newton in optimization) capture only the 
-mode and curvature, missing asymmetry and heavier tails.
+The non-trivial coupling between rotation and translation 
+(the semi-direct product structure of $SE(3)$) introduces 
+systematic bias at first order that is typically neglected.
+ 
+\item \emph{Gaussian approximation of non-Gaussian posteriors.}
+When observations are projective, the joint posterior over 
+pose and 3D landmarks is non-Gaussian in the pose parameters. 
+Laplace approximations capture only the mode and curvature, 
+missing asymmetry and heavier tails.
 \end{enumerate}
-
-This paper does not propose a new basic calculus for Lie groups;
-rather, it develops a higher-order probabilistic inference framework
-on top of the standard $SE(3)$ machinery used in robotics.
-Its contributions are fourfold:
-
+ 
+This paper builds on the standard $SE(3)$ differential calculus 
+established by Sol\`a et al.~\cite{sola2018micro}, 
+Barfoot~\cite{barfoot2024}, and others---it does not re-derive 
+exponential maps, adjoints, or basic Jacobians. Instead, it 
+develops a higher-order probabilistic inference framework on top 
+of that machinery, contributing:
+ 
 \begin{itemize}
-\item A bias analysis of pose parametrization showing that
-Lie-Cartan coordinates of the first kind provide the natural
-centered coordinates for Gaussian perturbations on $SE(3)$,
-whereas second-kind translational coordinates inherit bias
-through the nonlinear rotation--translation coupling.
-
 \item Closed-form first- and second-order propagation formulas
 for uncertain pose composition and point transformation on
-the full $SE(3)$ group, including the coupling Jacobian
+$SE(3)$, including the rotation--translation coupling Jacobian
 $\mathsf{J}_t(\bfOmega,\mathbf{t})$.
-
-\item A saddlepoint marginalization method for eliminating
+ 
+\item A bias analysis showing that Lie-Cartan coordinates of
+the first kind provide the natural centered parametrization
+for Gaussian perturbations on $SE(3)$, whereas second-kind
+translational coordinates inherit systematic bias through
+the nonlinear rotation--translation coupling.
+ 
+\item A saddlepoint marginalization scheme for eliminating
 Euclidean latent variables from projective pose-landmark
-posteriors, yielding a more accurate pose marginal than the
-standard Laplace/Gauss--Newton approximation.
-
+posteriors, improving on the Laplace/Schur approximation 
+while preserving the reduced pose-only formulation.
+ 
 \item A closed-form finite Rodrigues/BCH composition formula
-via the $SU(2)$ double cover, including explicit treatment of
-the phase-reflection boundary at $\Theta=\pi$.
+via the $SU(2)$ double cover, with explicit treatment of
+phase reflection at $\Theta=\pi$.
 \end{itemize}
+ 
+Additionally, Appendix~\ref{app:correspondence} collects three 
+identities---$\mathsf{S}^{-1} = \mathsf{J}_{\omega_l}$, 
+$\det\mathsf{S}$ in closed form, and a compact coupling 
+Jacobian---that complement the existing toolkit and are used 
+throughout the paper.
 
 \subsection{Related Work}
-
-The use of Lie groups in robotics and estimation is by now
-well established. Pennec and Thirion~\cite{pennec97}
-introduced compositional uncertainty models on $SE(3)$.
-The invariant EKF literature, including Barrau and Bonnabel,
-showed how group-affine system structure yields autonomous
-error dynamics and improved consistency properties.
-Sol\`a et al.~\cite{sola2018micro} and Barfoot~\cite{barfoot2024}
-provided widely used references for the differential calculus of
-$SO(3)$ and $SE(3)$, including exponential and logarithmic
-maps, adjoints, Jacobians, and covariance transport.
-Forster et al.~\cite{forster2017manifold} demonstrated the
-practical importance of this framework through manifold-based
-IMU preintegration. These works established the modern
-first-order calculus on Lie groups that underlies much of
-contemporary SLAM, visual odometry, and state estimation.
-
-A second line of work studies uncertainty on Lie groups beyond
-local linearization. Chirikjian~\cite{chirikjian2012stochastic}
-developed global stochastic models and harmonic-analysis
-methods on Lie groups. Wang and Chirikjian~\cite{wang2008nonparametric}
-considered nonparametric uncertainty representations, while
-Ye and Chirikjian~\cite{ye2024uncertainty} studied propagation
-through stochastic differential equations on unimodular groups.
-Bourmaud et al.~\cite{bourmaud2013discrete} developed
-Lie-group variants of recursive estimators. These works make
-clear that uncertainty on nonlinear groups cannot always be
-captured adequately by Euclidean first-order approximations,
-but they do not provide the closed-form higher-order
-$SE(3)$ propagation formulas developed here for the specific
-right-compositional Gaussian model used in robotics.
-
-The present paper also builds on the author's earlier
-contributions~\cite{kuehnel2004,kuehnel2005,kuehnel2008}.
-In~\cite{kuehnel2004}, Lie-Cartan coordinates of the first kind
-and the marginalized MAP viewpoint for Bayesian inference on
-$SE(3)$ were introduced. In~\cite{kuehnel2005}, the graphical
-structure of SLAM was analyzed using local-frame junction
-trees. The present work substantially extends that foundation:
-it develops explicit second-order propagation formulas on the
-full $SE(3)$ group, establishes the parametrization-bias
-distinction between first- and second-kind coordinates,
-derives a saddlepoint correction for marginalizing Euclidean
-latent variables under projective observation models, and
-provides a closed-form finite Rodrigues/BCH treatment via
-the $SU(2)$ double cover with explicit handling of phase
-reflection at $\Theta=\pi$.
-
-The novelty of this paper is therefore not a new basic Lie
-theory for $SE(3)$ itself, but a new higher-order inference
-framework built on top of standard Lie-group foundations.
-Specifically, the paper contributes:
-(i) closed-form first- and second-order propagation of mean
-and covariance for uncertain compositions on $SE(3)$,
-including the rotation-translation coupling Jacobian;
-(ii) a bias analysis showing why first-kind exponential
-coordinates provide the natural centered parametrization for
-Gaussian perturbations, whereas second-kind translational
-coordinates inherit systematic bias through the nonlinear
-coupling map; and
-(iii) a saddlepoint marginalization scheme for projective
-pose-landmark models that improves on the standard
-Laplace/Schur approximation while preserving the reduced
-pose-only formulation.
-
+ 
+The Lie-group framework for robotics estimation is well 
+established. Pennec and Thirion~\cite{pennec97} introduced 
+compositional uncertainty models on $SE(3)$; Barrau and 
+Bonnabel~\cite{barrau2017invariant} showed that group-affine 
+structure yields autonomous error dynamics in invariant EKFs; 
+Sol\`a et al.~\cite{sola2018micro} and Barfoot~\cite{barfoot2024} 
+consolidated the differential calculus (exponential/logarithmic 
+maps, adjoints, Jacobians, covariance transport); and 
+Forster et al.~\cite{forster2017manifold} demonstrated its 
+practical impact through manifold-based IMU preintegration. 
+These works define the first-order Lie-group calculus that 
+underlies modern SLAM and visual-inertial odometry.
+ 
+A parallel line of work addresses uncertainty beyond local 
+linearization. Chirikjian~\cite{chirikjian2012stochastic} 
+developed global stochastic models via harmonic analysis on 
+Lie groups; Wang and Chirikjian~\cite{wang2008nonparametric} 
+studied nonparametric error propagation; 
+Ye and Chirikjian~\cite{ye2024uncertainty} analyzed propagation 
+through SDEs on unimodular groups; and 
+Bourmaud et al.~\cite{bourmaud2013discrete} built Lie-group 
+recursive estimators. These works demonstrate that first-order 
+Euclidean approximations are insufficient on nonlinear groups, 
+but do not provide the closed-form higher-order propagation 
+formulas developed here for the right-compositional Gaussian 
+model standard in robotics.
+ 
+The present work extends the author's earlier 
+contributions~\cite{kuehnel2004,kuehnel2005,kuehnel2008}, 
+which introduced the marginalized MAP viewpoint and 
+local-frame junction trees for SLAM on $SE(3)$, by 
+adding explicit second-order propagation, the 
+parametrization-bias analysis, saddlepoint 
+marginalization for projective models, and the 
+$SU(2)$-based finite composition formula.
+ 
 \subsection{Paper Organization}
 
 Section~\ref{sec:SE3geometry} establishes the $SE(3)$ 
