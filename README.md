@@ -200,9 +200,9 @@ Robotics or estimation journal (IEEE Transactions on Robotics, IJRR, or similar)
 - **Kuehnel (2004)**: *AIP Conf. Proc.* vol. 735, pp. 176–186. [DOI: 10.1063/1.1835212](https://doi.org/10.1063/1.1835212) — First introduction of Lie-Cartan exponential coordinates for unbiased Bayesian pose estimation
 - **Kuehnel (2005)**: *AIP Conf. Proc.* vol. 803, pp. 318–329. [DOI: 10.1063/1.2149810](https://doi.org/10.1063/1.2149810) — Local frame junction trees in SLAM
 - **Kuehnel (2008)**: Tech. Rep., NASA Ames / USRA-RIACS — Full SE(3) algebra toolkit (BCH, Jacobians, phase reflection)
-- **Solà, Deray & Atchuthan (2018)**: "A micro Lie theory for state estimation in robotics" — First-order SE(3) machinery; our work extends to second order
+- **Solà, Deray & Atchuthan (2018)**: ["A micro Lie theory for state estimation in robotics"](https://arxiv.org/pdf/1812.01537) — First-order SE(3) machinery; our work extends to second order
 - **Ye & Chirikjian (2024)**: "Uncertainty propagation on unimodular Lie groups" — Propagation via SDEs; our approach uses closed-form BCH
-- **Barfoot (2024)**: *State Estimation for Robotics* — Comprehensive textbook; our coupling Jacobian and saddlepoint go beyond what is covered
+- **Barfoot (2024)**: [*State Estimation for Robotics*](https://asrl.utias.utoronto.ca/~tdb/bib/barfoot_ser24.pdf) — Comprehensive textbook; our coupling Jacobian and saddlepoint go beyond what is covered
 
 ## License
 
