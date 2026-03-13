@@ -73,10 +73,10 @@ The verification process uncovered errors in the original 2008 formulation:
 │   │   ├── so3.rs                     # SO(3): Rodrigues exp/log, S matrix, S⁻¹
 │   │   ├── se3.rs                     # SE(3): Pose struct, compose/inverse/act/exp/log
 │   │   ├── bch.rs                     # Finite BCH via SU(2) quaternions, phase reflection, Jacobians
-│   │   ├── jacobians.rs              # J_ωr, J_ωl, J_t coupling (analytic T-form), 6×6 SE(3) Jacobian
-│   │   ├── projective.rs             # Pinhole camera, derivatives through 3rd order, third cumulants
-│   │   ├── saddlepoint.rs            # Landmark optimization, saddlepoint correction, validity guard
-│   │   └── propagation.rs            # First/second-order covariance transport, MC validation
+│   │   ├── jacobians.rs               # J_ωr, J_ωl, J_t coupling (analytic T-form), 6×6 SE(3) Jacobian
+│   │   ├── projective.rs              # Pinhole camera, derivatives through 3rd order, third cumulants
+│   │   ├── saddlepoint.rs             # Landmark optimization, saddlepoint correction, validity guard
+│   │   └── propagation.rs             # First/second-order covariance transport, MC validation
 │   └── examples/
 │       ├── bias_experiment.rs         # Experiment 1: L1 vs L2 coordinate bias (21× ratio)
 │       ├── multicam_saddlepoint.rs    # Multi-camera saddlepoint with point cloud & camera sweep
