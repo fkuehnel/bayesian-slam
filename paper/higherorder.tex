@@ -316,6 +316,76 @@ $\Delta f$ on the left gives a related distribution
 where $\mathsf{J}_{lr}(f_0) \in \real^{6 \times 6}$ is the 
 adjoint Jacobian (see Appendix~\ref{app:weinorman}).
 
+\subsection{Covariance Transport on $SE(3)$}
+\label{subsec:covtransport}
+
+We now address a fundamental operation: transporting
+the covariance from one base point to another.
+Consider the uncertainty pose $\hat{f} = (f_0, \sfSigma{ff_r})$
+and a new viewpoint $f_t$ in its neighborhood.
+A small right deviation from~$f_t$,
+\beq
+    \Delta f_t = (\mathsf{R}(\delta\bfomega_f), \delta{\bf T}_f),
+    \quad \ln\Delta f_t = [\delta\bfomega_f, \delta{\bf T}_f] \to {\bf 0},
+    \label{eq:rightdeviation}
+\eeq
+can be related to the original parametrization at~$f_0$
+through the geodesic connecting them:
+\beq
+    g = f_0^{-1} \cdot f_t = (\mathsf{R}(\bfomega_g), {\bf T}_g),
+    \quad \ln g = [\bfomega_g, {\bf t}_g].
+    \label{eq:geodesic}
+\eeq
+In general, $g$ will not be close to identity---it represents
+the finite displacement between the two base points.
+
+The key observation is that $\ln g \in T_1SE(3)$ can be
+interpreted as the tangent vector of the geodesic from $f_0$
+to $f_t$. In the small-deviation limit,
+$\ln(g \cdot \Delta f_t) = [\bfomega_{\rm id}, {\bf t}_{\rm id}]$
+is linearized as
+\beq
+    \begin{bmatrix} \bfomega_{\rm id} \\ {\bf t}_{\rm id} \end{bmatrix}
+    = \underbrace{\begin{pmatrix}
+    \mathsf{J}_{\omega_r}(\bfomega_g) & \mathsf{0} \\
+    \mathsf{J}_t(\bfomega_g, {\bf t}_g) & \mathsf{J}_{\omega_r}(\bfomega_g)
+    \end{pmatrix}}_{\mathsf{J}_{gr}}
+    \begin{bmatrix} \delta\bfomega_f \\ \delta{\bf T}_f \end{bmatrix}
+    + \begin{bmatrix} \bfomega_g \\ {\bf t}_g \end{bmatrix}.
+    \label{eq:SE3transport}
+\eeq
+This is the $SE(3)$ analog of the Euclidean vector translation
+formula: the $6\times 6$ right Jacobian $\mathsf{J}_{gr}$
+(Appendix~\ref{app:weinorman}) plays the role of a local
+coordinate change between tangent spaces at $f_t$ and at $f_0$.
+For small $[\bfomega_g, {\bf t}_g]$, $\mathsf{J}_{gr} \to \mathsf{I}$
+and~(\ref{eq:SE3transport}) reduces to simple vector addition.
+
+The probability of finding a right deviation $\Delta f_t$
+from the new viewpoint $f_t$ is therefore
+\beq
+    p(\Delta f_t) \sim
+    \mathcal{N}\!\left(f_t^{-1}\!\cdot f_0,\;
+    \mathsf{J}_{gr}^{-T}\, \sfSigma{ff_r}\, \mathsf{J}_{gr}^{-1}\right).
+    \label{eq:covtransport}
+\eeq
+This is the fundamental covariance transport formula on $SE(3)$:
+the information matrix $\sfSigma{ff_r}^{-1}$ transforms
+as a \emph{bilinear form} under the Jacobian $\mathsf{J}_{gr}$,
+reflecting the position-dependent Mahalanobis metric on the manifold.
+
+\begin{remark}
+The block-triangular structure of $\mathsf{J}_{gr}$ in~(\ref{eq:SE3transport})
+means that the rotational component transforms independently
+(through $\mathsf{J}_{\omega_r}$ alone), while the translational
+component couples to rotation through $\mathsf{J}_t$.
+This coupling is the geometric origin of the bias discussed
+in Proposition~\ref{prop:bias}: the $SE(3)$ semi-direct product
+structure makes the translation-rotation cross-terms in the
+transported covariance non-trivial even when the original
+covariance is block-diagonal.
+\end{remark}
+
 \subsection{First-Order Composition of Uncertainty Poses}
 
 The composition of two uncertainty poses 
