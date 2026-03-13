@@ -27,6 +27,7 @@ impl Rng {
         let u2 = self.uniform();
         (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos()
     }
+    #[allow(dead_code)]
     fn normal3(&mut self, sigma: f64) -> Vec3 {
         [sigma * self.normal(), sigma * self.normal(), sigma * self.normal()]
     }

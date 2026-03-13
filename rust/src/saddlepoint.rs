@@ -327,6 +327,206 @@ pub fn evaluate_marginalized_map(
     }
 }
 
+// =========================================================================
+// Multi-camera saddlepoint marginalization
+// =========================================================================
+
+/// A single camera's observation of a landmark.
+#[derive(Debug, Clone)]
+pub struct CameraObs {
+    pub rot: Mat3,
+    pub trans: Vec3,
+    pub z: [f64; 2],
+    pub sigma_zz_inv: [[f64; 2]; 2],
+}
+
+/// Result of multi-camera landmark optimization.
+#[derive(Debug, Clone)]
+pub struct MultiCamOptResult {
+    pub x_opt: Vec3,
+    /// Camera-frame points at optimum (one per camera).
+    pub xp_opts: Vec<Vec3>,
+    /// Total Hessian (prior + all cameras).
+    pub hessian: Mat3,
+    pub nll_opt: f64,
+    pub log_det_h: f64,
+}
+
+/// Optimize a single landmark observed from multiple cameras.
+///
+/// NLL = Σ_i ½||z_i - π(R_i x + T_i)||²_{Σ_zz} + ½||x - x_prior||²_{Σ_xx}
+pub fn optimize_landmark_multicam(
+    cameras: &[CameraObs],
+    x_prior: &Vec3,
+    sigma_xx_inv: &Mat3,
+    max_iter: usize,
+) -> MultiCamOptResult {
+    let mut x = *x_prior;
+
+    for _ in 0..max_iter {
+        let mut h = *sigma_xx_inv;
+        let dx = sub3(&x, x_prior);
+        let mut grad = mv3(sigma_xx_inv, &dx);
+
+        for cam in cameras {
+            let xp = projective::transform_point(&cam.rot, &cam.trans, &x);
+            if xp[2] < 1e-6 { continue; }
+
+            let pi = projective::project(&xp);
+            let e = [cam.z[0] - pi[0], cam.z[1] - pi[1]];
+            let p = projective::project_jacobian(&xp);
+
+            // PR = P · R (2×3)
+            let mut pr = [[0.0; 3]; 2];
+            for i in 0..2 { for j in 0..3 {
+                pr[i][j] = p[i][0]*cam.rot[0][j] + p[i][1]*cam.rot[1][j] + p[i][2]*cam.rot[2][j];
+            }}
+
+            // Accumulate Hessian: H += PR^T Σ^{-1} PR
+            for i in 0..3 { for j in 0..3 {
+                for m in 0..2 { for n in 0..2 {
+                    h[i][j] += pr[m][i] * cam.sigma_zz_inv[m][n] * pr[n][j];
+                }}
+            }}
+
+            // Accumulate gradient
+            let mut se = [0.0; 2];
+            for i in 0..2 { se[i] = cam.sigma_zz_inv[i][0]*e[0] + cam.sigma_zz_inv[i][1]*e[1]; }
+            for i in 0..3 { grad[i] -= pr[0][i]*se[0] + pr[1][i]*se[1]; }
+        }
+
+        let h_inv = match inv3_safe(&h) { Some(hi) => hi, None => break };
+        let delta = mv3(&h_inv, &scale3(-1.0, &grad));
+        x = add3(&x, &delta);
+        if norm3(&delta) < 1e-10 { break; }
+    }
+
+    // Evaluate at optimum
+    let mut nll = 0.0;
+    let dx = sub3(&x, x_prior);
+    nll += 0.5 * dot3(&dx, &mv3(sigma_xx_inv, &dx));
+
+    let mut hessian = *sigma_xx_inv;
+    let mut xp_opts = Vec::with_capacity(cameras.len());
+
+    for cam in cameras {
+        let xp = projective::transform_point(&cam.rot, &cam.trans, &x);
+        xp_opts.push(xp);
+        if xp[2] < 1e-6 { continue; }
+
+        nll += projective::neg_log_likelihood(&cam.z, &xp, &cam.sigma_zz_inv);
+
+        let p = projective::project_jacobian(&xp);
+        let mut pr = [[0.0; 3]; 2];
+        for i in 0..2 { for j in 0..3 {
+            pr[i][j] = p[i][0]*cam.rot[0][j] + p[i][1]*cam.rot[1][j] + p[i][2]*cam.rot[2][j];
+        }}
+        for i in 0..3 { for j in 0..3 {
+            for m in 0..2 { for n in 0..2 {
+                hessian[i][j] += pr[m][i] * cam.sigma_zz_inv[m][n] * pr[n][j];
+            }}
+        }}
+    }
+
+    let d = det3(&hessian);
+    MultiCamOptResult {
+        x_opt: x, xp_opts, hessian, nll_opt: nll,
+        log_det_h: if d > 0.0 { d.ln() } else { f64::NEG_INFINITY },
+    }
+}
+
+/// Quartic contraction Q₄ for multi-camera case.
+fn quartic_contraction_multicam(
+    cameras: &[CameraObs], x_opt: &Vec3,
+    sigma_xx_inv: &Mat3, h_inv: &Mat3,
+) -> f64 {
+    let h = 1e-5;
+
+    let hess_at = |x: &Vec3| -> Mat3 {
+        let mut hess = *sigma_xx_inv;
+        for cam in cameras {
+            let xp = projective::transform_point(&cam.rot, &cam.trans, x);
+            if xp[2] < 1e-6 { continue; }
+            let p = projective::project_jacobian(&xp);
+            let mut pr = [[0.0; 3]; 2];
+            for i in 0..2 { for j in 0..3 {
+                pr[i][j] = p[i][0]*cam.rot[0][j] + p[i][1]*cam.rot[1][j] + p[i][2]*cam.rot[2][j];
+            }}
+            for i in 0..3 { for j in 0..3 {
+                for m in 0..2 { for n in 0..2 {
+                    hess[i][j] += pr[m][i] * cam.sigma_zz_inv[m][n] * pr[n][j];
+                }}
+            }}
+        }
+        hess
+    };
+
+    let trace_func = |x: &Vec3| -> f64 {
+        let hx = hess_at(x);
+        let mut t = 0.0;
+        for a in 0..3 { for b in 0..3 { t += hx[a][b] * h_inv[a][b]; }}
+        t
+    };
+
+    let t0 = trace_func(x_opt);
+    let mut q4 = 0.0;
+    for c in 0..3 { for d in 0..3 {
+        let d2t = if c == d {
+            let mut xp = *x_opt; xp[c] += h;
+            let mut xm = *x_opt; xm[c] -= h;
+            (trace_func(&xp) - 2.0*t0 + trace_func(&xm)) / (h*h)
+        } else {
+            let mut xpp = *x_opt; xpp[c] += h; xpp[d] += h;
+            let mut xpm = *x_opt; xpm[c] += h; xpm[d] -= h;
+            let mut xmp = *x_opt; xmp[c] -= h; xmp[d] += h;
+            let mut xmm = *x_opt; xmm[c] -= h; xmm[d] -= h;
+            (trace_func(&xpp) - trace_func(&xpm) - trace_func(&xmp) + trace_func(&xmm))
+                / (4.0*h*h)
+        };
+        q4 += h_inv[c][d] * d2t;
+    }}
+    q4
+}
+
+/// Saddlepoint-corrected marginal for a landmark observed from multiple cameras.
+///
+/// Third cumulants sum over cameras: f'''_total = Σ_i f'''_i
+pub fn landmark_marginal_multicam(
+    opt: &MultiCamOptResult,
+    cameras: &[CameraObs],
+    sigma_xx_inv: &Mat3,
+) -> (f64, SaddlepointResult) {
+    let laplace = -opt.nll_opt - 0.5 * opt.log_det_h
+        + 1.5 * (2.0 * std::f64::consts::PI).ln();
+
+    let h_inv = match inv3_safe(&opt.hessian) {
+        Some(hi) => hi,
+        None => return (laplace, SaddlepointResult {
+            c1: 0.0, term_a: 0.0, term_b: 0.0, term_q4: 0.0,
+            status: SaddlepointStatus::SingularHessian,
+        }),
+    };
+
+    // Sum third cumulants over all cameras
+    let mut f3_total = [[[0.0f64; 3]; 3]; 3];
+    for (i, cam) in cameras.iter().enumerate() {
+        if opt.xp_opts[i][2] < 1e-6 { continue; }
+        let f3_i = projective::third_cumulants(&cam.rot, &opt.xp_opts[i], &cam.sigma_zz_inv);
+        for a in 0..3 { for b in 0..3 { for c in 0..3 {
+            f3_total[a][b][c] += f3_i[a][b][c];
+        }}}
+    }
+
+    let q4 = quartic_contraction_multicam(cameras, &opt.x_opt, sigma_xx_inv, &h_inv);
+    let result = saddlepoint_correction_full(&h_inv, &f3_total, q4);
+
+    let log_post = match result.status {
+        SaddlepointStatus::Valid => laplace + (1.0 + result.c1).ln(),
+        _ => laplace,
+    };
+    (log_post, result)
+}
+
 fn inv3_safe(m: &Mat3) -> Option<Mat3> {
     let d = det3(m);
     if d.abs() < 1e-30 { None } else { Some(inv3(m)) }
@@ -427,5 +627,79 @@ mod tests {
         let h_inv = inv3(&opt.hessian);
         let q4 = quartic_contraction(&rot, &trans, &opt.x_opt, &iso2(0.01), &iso3(1.0), &h_inv);
         assert!(q4.is_finite() && q4.abs() > 1e-10, "Q₄={:.2e}", q4);
+    }
+
+    // ─── Multi-camera tests ───
+
+    fn make_cam(omega: &Vec3, trans: &Vec3, x_world: &Vec3, sig_z: f64) -> CameraObs {
+        let rot = so3::exp(omega);
+        let xp = projective::transform_point(&rot, trans, x_world);
+        CameraObs {
+            rot, trans: *trans,
+            z: projective::project(&xp),
+            sigma_zz_inv: iso2(sig_z),
+        }
+    }
+
+    #[test]
+    fn multicam_opt_recovers_point() {
+        let x_true = [0.5, -0.3, 8.0];
+        let cams = vec![
+            make_cam(&[0.0, 0.0, 0.0], &[0.0, 0.0, 0.0], &x_true, 0.01),
+            make_cam(&[0.0, 0.3, 0.0], &[2.0, 0.0, 0.0], &x_true, 0.01),
+        ];
+        let opt = optimize_landmark_multicam(&cams, &[0.6, -0.2, 8.5], &iso3(10.0), 20);
+        let err = norm3(&sub3(&opt.x_opt, &x_true));
+        assert!(err < 0.01, "multicam should recover point: err={:.4}", err);
+    }
+
+    #[test]
+    fn multicam_single_matches_original() {
+        // Single camera multicam should give same result as original function
+        let rot = I3; let trans = [0.0; 3];
+        let x = [0.5, -0.3, 10.0];
+        let z = projective::project(&x);
+        let sig_z = iso2(0.01);
+        let sig_x = iso3(1.0);
+
+        let opt1 = optimize_landmark(&rot, &trans, &z, &sig_z, &x, &sig_x, 20);
+        let cams = vec![CameraObs { rot, trans, z, sigma_zz_inv: sig_z }];
+        let opt_m = optimize_landmark_multicam(&cams, &x, &sig_x, 20);
+
+        let err = norm3(&sub3(&opt1.x_opt, &opt_m.x_opt));
+        assert!(err < 1e-8, "single multicam should match original: err={:.2e}", err);
+
+        // Marginals should also agree
+        let (lp1, r1) = landmark_marginal_log_posterior(&opt1, &rot, &trans, &sig_z, &sig_x);
+        let (lpm, rm) = landmark_marginal_multicam(&opt_m, &cams, &sig_x);
+        assert!((lp1 - lpm).abs() < 1e-6,
+            "log posteriors: single={:.6} multi={:.6}", lp1, lpm);
+        assert!((r1.c1 - rm.c1).abs() < 1e-6,
+            "c1: single={:.6} multi={:.6}", r1.c1, rm.c1);
+    }
+
+    #[test]
+    fn multicam_reduces_correction() {
+        // More cameras observing → better constrained → smaller |c₁|
+        let x = [0.5, -0.3, 8.0];
+        let sig_x = iso3(2.0);  // weak prior
+
+        let cam1 = make_cam(&[0.0, 0.0, 0.0], &[0.0, 0.0, 0.0], &x, 0.01);
+        let cam2 = make_cam(&[0.0, 0.3, 0.0], &[2.0, 0.0, 0.0], &x, 0.01);
+        let cam3 = make_cam(&[0.0, -0.3, 0.0], &[-2.0, 0.0, 0.0], &x, 0.01);
+
+        let opt1 = optimize_landmark_multicam(&[cam1.clone()], &x, &sig_x, 20);
+        let opt2 = optimize_landmark_multicam(&[cam1.clone(), cam2.clone()], &x, &sig_x, 20);
+        let opt3 = optimize_landmark_multicam(&[cam1.clone(), cam2.clone(), cam3.clone()], &x, &sig_x, 20);
+
+        let (_, r1) = landmark_marginal_multicam(&opt1, &[cam1.clone()], &sig_x);
+        let (_, r2) = landmark_marginal_multicam(&opt2, &[cam1.clone(), cam2.clone()], &sig_x);
+        let (_, r3) = landmark_marginal_multicam(&opt3, &[cam1, cam2, cam3], &sig_x);
+
+        eprintln!("c₁: 1cam={:.6}, 2cam={:.6}, 3cam={:.6}", r1.c1, r2.c1, r3.c1);
+        assert!(r2.c1.abs() < r1.c1.abs(),
+            "2 cameras should give smaller |c₁|: {:.6} vs {:.6}", r2.c1, r1.c1);
+        // 3 cameras may or may not be smaller than 2 (depends on geometry), but should be valid
+        assert!(matches!(r3.status, SaddlepointStatus::Valid));
     }
 }
