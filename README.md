@@ -1,6 +1,6 @@
 # Higher-Order Uncertainty Propagation and Saddlepoint Marginalization on SE(3)
 
-**Author:** Frank O. Kuehnel — Excel Solutions LLC
+**Authors:** Frank O. Kuehnel, Andre Jalobeanu
 
 ---
 
@@ -28,7 +28,7 @@ Current filters and optimizers (EKF, IEKF, factor graphs) propagate pose uncerta
 
 When camera observations are projective (x/z, y/z), the joint posterior over pose and 3D landmarks is non-Gaussian in the pose parameters. Standard Laplace approximation (Schur complement in bundle adjustment) misses this asymmetry. We develop:
 
-- A saddlepoint correction with the **corrected formula** c₁ = (1/12)A + (1/8)B − (1/8)Q₄
+- A saddlepoint correction with the formula c₁ = (1/12)A + (1/8)B − (1/8)Q₄
 - Two distinct cubic contraction types (cross: 6/15 Isserlis pairings, trace: 9/15)
 - Quartic term with correct negative sign (from exp(−g₄) ≈ 1 − g₄)
 - Validity guard: correction applied only when |c₁| < 0.5 (σ_depth/depth ≲ 0.3)
@@ -37,7 +37,7 @@ When camera observations are projective (x/z, y/z), the joint posterior over pos
 
 ### 3. Complete SE(3) Algebra Toolkit
 
-The paper provides a self-contained reference for the SE(3) machinery, all symbolically verified:
+The paper provides a self-contained reference for the SE(3) machinery, all symbolically verified. This machinery is equivalent to the standard toolkit in **Solà, et. al**, and extends it: 
 
 - Exponential/logarithmic maps with Lie-Cartan coordinates of the first kind
 - Closed-form finite Rodrigues vector composition via the SU(2)/Z₂ ≅ SO(3) double cover
@@ -45,14 +45,6 @@ The paper provides a self-contained reference for the SE(3) machinery, all symbo
 - Wei-Norman formula and both left/right Rodrigues Jacobians
 - Key identities: S⁻¹ = J_ωl, S⁻¹R = RS⁻¹ = J_ωr (verified to machine precision)
 - det S = 2(1−cosΘ)/Θ² (strictly positive, guarantees invertibility)
-
-## Errata from Original Tech Report
-
-The verification process uncovered errors in the original 2008 formulation:
-
-1. **Third derivative sign** (Appendix E, Eq. thirdderivs): ∂³u/∂x₃'³ = **−6u/x₃'³** (was +6u/x₃'³)
-2. **Saddlepoint formula** (Appendix E, Eq. saddlepointfull): The original (5/24)A + (1/8)Q₄ was incorrect. The correct formula is **(1/12)A + (1/8)B − (1/8)Q₄** with two distinct contraction types and a sign flip on the quartic term.
-3. **Coupling Jacobian** (Appendix C, Eq. dSinvTdOmega): The original formula used the exponential coordinate **t** where the physical translation **T** was required in the leading skew-symmetric term. A corrected T-form with a new scalar α = (sinΘ − Θ)/(2(1−cosΘ)) has been derived and verified. **Symbolic proof confirms both the T-form and the corrected t-form (with S−S⁻¹(−Ω) structure) are algebraically equivalent** when T = S(Ω)t.
 
 ## Repository Structure
 
@@ -211,6 +203,9 @@ The `multicam_saddlepoint` example demonstrates saddlepoint-corrected landmark m
 ### Usage
 
 ```bash
+cargo run --release --example bias_experiment          # paper config: N=3, σ=1.0
+cargo run --release --example bias_experiment mild     # mild config: N=8, σ=0.5
+
 cargo run --release --example multicam_saddlepoint [N_cameras] [N_landmarks]
 cargo run --release --example multicam_saddlepoint 4 20   # default
 cargo run --release --example multicam_saddlepoint 2 30   # stereo
@@ -273,16 +268,17 @@ Robotics or estimation journal (IEEE Transactions on Robotics, IJRR, or similar)
 - **Kuehnel (2005)**: *AIP Conf. Proc.* vol. 803, pp. 318–329. [DOI: 10.1063/1.2149810](https://doi.org/10.1063/1.2149810) — Local frame junction trees in SLAM
 - **Kuehnel (2008)**: Tech. Rep., NASA Ames / USRA-RIACS — Full SE(3) algebra toolkit (BCH, Jacobians, phase reflection)
 - **Solà, Deray & Atchuthan (2018)**: ["A micro Lie theory for state estimation in robotics"](https://arxiv.org/pdf/1812.01537) — First-order SE(3) machinery; our work extends to second order
-- **Ye & Chirikjian (2024)**: "Uncertainty propagation on unimodular Lie groups" — Propagation via SDEs; our approach uses closed-form BCH
+- **Ye & Chirikjian (2024)**: ["Uncertainty propagation on unimodular Lie groups"](https://openreview.net/forum?id=duNh060j1J) — Propagation via SDEs; our approach uses closed-form BCH
 - **Barfoot (2024)**: [*State Estimation for Robotics*](https://asrl.utias.utoronto.ca/~tdb/bib/barfoot_ser24.pdf) — Comprehensive textbook; our coupling Jacobian and saddlepoint go beyond what is covered
 
 ## License
 
-Paper content: All rights reserved, Frank O. Kuehnel / Excel Solutions LLC.
+Paper content: All rights reserved, Excel Solutions LLC.
 
 Code: MIT License (see `rust/LICENSE` when available).
 
-## Contact
+## Contacts
 
 Frank O. Kuehnel — Excel Solutions LLC
+Andre Jalobenau - Bayesmap Inc.
 Email: kuehnelf@gmail.com
