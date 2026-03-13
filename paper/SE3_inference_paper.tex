@@ -1510,37 +1510,30 @@ exponentials (\ref{eq:expproduct}) to the changes of one resulting exponential. 
 to obtain a closed form expression from (\ref{eq:weinorman}).
 
 \paragraph{Direct route via finite addition.}
-It shall be noticed that with Eqn.~(\ref{eq:addSO3finite})
-we directly obtain the right Rodrigues Jacobian $\mathsf{J}_{\omega_r}(\bfOmega_a)$ by,
-\beq
-    \mathsf{J}_{\omega_r}(\bfOmega_a) = 
-    \left.{\partial \bfOmega_c \over \partial \bfOmega_b}\right|_{\Theta_b=0}=
-    \left.{\partial \bfOmega_c \over \partial \Theta_b}\right|_{\Theta_b=0} {\bf r}_b+
-    \left.{\partial \bfOmega_c \over \partial {\bf r}_b} {\partial {\bf r}_b \over \partial \bfOmega_b}
-    \right|_{\Theta_b=0}. \label{eq:jacobianomega1}
-\eeq
-Further, Eqn.~(\ref{eq:jacobianomega1}) can be evaluated as,
+It shall be noticed that with Eqn.~(\ref{eq:addSO3finite}) we directly obtain
+the right and left Rodrigues Jacobians by differentiating $\bfOmega_c$ with
+respect to $\bfOmega_b$ (right) or $\bfOmega_a$ (left) at the identity:
 \begin{multline}
-    \mathsf{J}_{\omega_r}(\bfOmega_a) = (1-x)\, \mathsf{I}+ x\, {\bf r}_a{\bf r}_a^T + {1\over 2}[\bfOmega_a]_\times,\\
-    1-x = {\Theta_a\over 2}\tan^{-1}{\Theta_a\over 2}.
+    \mathsf{J}_{\omega_{r,l}}(\bfOmega) = (1-x)\,\mathsf{I} + x\,{\bf r}{\bf r}^T
+    \pm \tfrac{1}{2}[\bfOmega]_\times\,,\\
+    1-x = {\Theta\over 2}\cot{\Theta\over 2}\,,
     \label{eq:RodweinormanJ}
 \end{multline}
-Similarly, we could leave $\bfOmega_b$ in the product expansion (\ref{eq:expproduct}) at a finite value
-and consider infinitesimal left variations of $\bfOmega_a\rightarrow {\bf 0}$. This naturally leads to the
-complementary left Rodrigues Jacobian
-\begin{multline}
-    \mathsf{J}_{\omega_l} (\bfOmega_b) = (1-y)\, \mathsf{I}+ y\, {\bf r}_b{\bf r}_b^T - {1\over 2}[\bfOmega_b]_\times,\\
-    1-y = {\Theta_b\over 2}\tan^{-1}{\Theta_b\over 2}.
-\end{multline}
-It shall be emphasised that the Jacobians above don't have singularities and are invertible, since all quantities
-are well defined for $\Theta\leq\pi$ and $\mathrm{det}( \mathsf{J}_{\omega_r}) = (1-x)^2 + \Theta_a^2/4$.
+where $+$ gives $\mathsf{J}_{\omega_r}$ and $-$ gives $\mathsf{J}_{\omega_l}$.
+Both are singularity-free and invertible for $\Theta\leq\pi$, with
+$\det(\mathsf{J}_{\omega_r}) = \det(\mathsf{J}_{\omega_l}) = (1-x)^2 + \Theta^2/4$.
+Comparing with $\mathsf{S}^{-1}(\bfOmega)$ from the characteristic identity
+$\mathsf{H}(\mathsf{H}^2+\mathsf{I})=0$, one finds
+$\mathsf{S}^{-1}(\bfOmega) = \mathsf{J}_{\omega_l}(\bfOmega) = \mathsf{J}_{\omega_r}(-\bfOmega)$,
+and hence $\det\mathsf{S} = 2(1-\cos\Theta)/\Theta^2$, confirming invertibility
+for all $\Theta\in[0,\pi)$.
 
 %% -----------------------------------------------------------------------
 \subsection{$SE(3)$ Composition Jacobians}
 \label{app:SE3composition}
 %% -----------------------------------------------------------------------
 In close analogy to the previous sections, a composition in $SE(3)$ can be analyzed
-in the {\em additive} framework,
+in the {\em compositive} framework,
 \beq
     (\mathsf{R}(\bfOmega_c),{\bf T}_c)=(\mathsf{R}_a,{\bf T}_a)\cdot
     (\mathsf{R}_b,{\bf T}_b)\, .
@@ -1553,7 +1546,6 @@ With the group composition (\ref{eq:groupcomp}), we can formally write
     \mathsf{S}^{-1}(\bfOmega_c) (\mathsf{R}_a{\bf T}_b + {\bf T}_a) \, ].
     \label{eq:addfiniteSE3}
 \eeq
-
 \subsubsection{Composing a finite with an infinitesimal motion}
 The addition formula (\ref{eq:addfiniteSE3}) can be analyzed in the limit $t\rightarrow 0$ where the right composition is $\ln (\mathsf{R}_b,{\bf T}_b) = [t \bfomega_b, t {\bf v}_b]$. It is easy to show that the following must hold to order ${\cal O}(t)$,
 \begin{multline}
@@ -1563,21 +1555,11 @@ The addition formula (\ref{eq:addfiniteSE3}) can be analyzed in the limit $t\rig
     \label{eq:SE3vectoraddition}
 \end{multline}
 
-\subsubsection{The $\mathsf{S}^{-1}$ identity and coupling Jacobian}
-In (\ref{eq:rodriguesapp}) we only gave the expression for $\mathsf{S}$. We can use the
-properties of the finite $\mathsf{H}$ algebra with its characteristic polynomial $\mathsf{H}(\mathsf{H}^2+\mathsf{I})=0$
-to obtain an expression for $\mathsf{S}^{-1}(\bfOmega)$. As an interesting fact, we meet the Rodrigues Jacobians again
-\begin{multline}
-    \mathsf{S}^{-1}(\bfOmega) = (1-x)\mathsf{I} + x\, {\bf r}{\bf r}^T - {1\over 2}[\bfOmega]_\times \\
-    = \mathsf{J}_{\omega_r}(-\bfOmega) = \mathsf{J}_{\omega_l}(\bfOmega)\;.
-    \label{eq:Sinvidentity}
-\end{multline}
-Since $\mathsf{S}^{-1} = \mathsf{J}_{\omega_l}$, the determinant is $\det\mathsf{J}_{\omega_l} = (1-x)^2 + \Theta^2/4$ and hence $\det\mathsf{S} = 2(1-\cos\Theta)/\Theta^2$, confirming invertibility for all $\Theta \in [0,\pi]$.
-
-Further, one can show that
+\subsubsection{The coupling Jacobian}
+Further to the identities established after (\ref{eq:RodweinormanJ}), one can show that
 \beq
     \mathsf{S}^{-1}(\bfOmega)\mathsf{R}(\bfOmega) = \mathsf{R}(\bfOmega)\mathsf{S}^{-1}(\bfOmega) =
-    \mathsf{J}_{\omega_r}(\bfOmega),
+    \mathsf{J}_{\omega_r}(\bfOmega).
     \label{eq:SinvRidentity}
 \eeq
 The coupling Jacobian $\mathsf{J}_{t}$ is defined by
@@ -1587,28 +1569,25 @@ The coupling Jacobian $\mathsf{J}_{t}$ is defined by
     \label{eq:couplingJacobian}
 \eeq
 where the derivative $\partial[\mathsf{S}^{-1}(\bfOmega){\bf T}]/\partial\bfOmega$
-is taken with the \emph{physical translation} ${\bf T}$ held fixed
+is taken with the physical translation ${\bf T}$ held fixed
 and only $\bfOmega$ varying in $\mathsf{S}^{-1}$.
 Differentiating $\mathsf{S}^{-1}(\bfOmega)$ with respect to $\bfOmega$
 and applying to the fixed vector ${\bf T}$ yields:
-\begin{eqnarray}
-    \frac{\partial[\mathsf{S}^{-1}{\bf T}]}{\partial\bfOmega} &=&
-    \frac{1}{2}[{\bf T}]_\times + \frac{x}{\Theta}\,{\bf r}{\bf T}^T
-    + \alpha\,{\bf T}{\bf r}^T + \nonumber\\
-    && \bar T\!\left[\frac{x}{\Theta}\mathsf{I}
-    - \left(\frac{2x}{\Theta}+\alpha\right){\bf r}{\bf r}^T\right] \nonumber\\
-    &=& {1\over 2}[{\bf t}]_\times+ {x\over\Theta}
-    \left( {\bf r}{\bf t}^T- {\bar t} \;\mathsf{H}^2 + {\bf t}{\bf r}^T \right) + \nonumber \\
-    && {{\bar t}\over\Theta} (\mathsf{S}(\bfOmega)-\mathsf{S}^{-1}(-\bfOmega)),
-    \label{eq:dSinvTdOmega}
-\end{eqnarray}
-where $\bar t = {\bf r}\cdot{\bf t}$ and $\bar T = {\bf r}\cdot{\bf T}$ is the axial component
-of ${\bf T}$ and
 \beq
-    \alpha = \frac{\sin\Theta - \Theta}{2(1-\cos\Theta)}
-    = -\frac{1}{2}\cot\frac{\Theta}{2} + \frac{1}{\Theta}\;.
-    \label{eq:alphadef}
+    \frac{\partial[\mathsf{S}^{-1}{\bf T}]}{\partial\bfOmega} =
+    \frac{1}{2}[{\bf T}]_\times + \beta\,{\bf r}{\bf T}^T
+    + \alpha\,{\bf T}{\bf r}^T
+    + \bar T\!\left[\beta\,\mathsf{I}
+    - (2\beta+\alpha)\,{\bf r}{\bf r}^T\right],
+    \label{eq:dSinvTdOmega}
 \eeq
+where $\bar T = {\bf r}\cdot{\bf T}$ is the axial component of ${\bf T}$ and
+\beq
+    \alpha = {1\over 4}\csc^2{\Theta\over 2}\,(\sin\Theta - \Theta)\,,\quad
+    \beta = {1\over\Theta} - {1\over 2}\cot{\Theta\over2}\,.
+    \label{eq:alphabetadef}
+\eeq
+Note that $\alpha<0$ for all $\Theta>0$ and $\alpha\neq\beta$ in general.
 These results finish the discourse on the $SE(3)$ composition Jacobians.
 
 \subsection{Additive versus compositive derivative}
@@ -1655,12 +1634,12 @@ perturbations with covariances $\sfSigma{gg}$ and $\sfSigma{ff}$ respectively.
 Using the finite composition formula~(\ref{eq:addSO3finite}) rather than 
 the truncated BCH series, the composed rotation in exponential coordinates 
 can be expanded to second order as
-\beq
-    \bfOmega_c = \bfOmega_a + \bfOmega_b + \frac{1}{2}\bfOmega_a \times \bfOmega_b
+\begin{multline}
+    \bfOmega_c = \bfOmega_a + \bfOmega_b + \frac{1}{2}\bfOmega_a \times \bfOmega_b\\
     + \frac{1}{12}\left(\bfOmega_a \times (\bfOmega_a \times \bfOmega_b) 
     + \bfOmega_b \times (\bfOmega_b \times \bfOmega_a)\right) + \cdots
     \label{eq:BCHexpanded}
-\eeq
+\end{multline}
 Taking the expectation with $\langle \bfOmega_a \rangle = 0$, 
 $\langle \bfOmega_b \rangle = 0$:
 \beq
