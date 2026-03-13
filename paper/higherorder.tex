@@ -1552,35 +1552,31 @@ The addition formula (\ref{eq:addfiniteSE3}) can be analyzed in the limit $t\rig
 \begin{multline}
     [\bfOmega_c,{\bf t}_c] = [\bfOmega_a,{\bf t}_a] + \\
     [\mathsf{J}_{\omega_r}(\bfOmega_a)\bfomega_b,\, 
-    \mathsf{S}^{-1}(\bfOmega_a)\mathsf{R}(\bfOmega_a){\bf v}_b + \mathsf{J}_{t_r}(\bfOmega_a,{\bf t}_a)\bfomega_b].
+    \mathsf{S}^{-1}(\bfOmega_a)\mathsf{R}(\bfOmega_a){\bf v}_b + \mathsf{J}_{t}(\bfOmega_a,{\bf t}_a)\bfomega_b].
     \label{eq:SE3vectoraddition}
 \end{multline}
 
 \subsubsection{The $\mathsf{S}^{-1}$ identity and coupling Jacobian}
 In (\ref{eq:rodriguesapp}) we only gave the expression for $\mathsf{S}$. We can use the
 properties of the finite $\mathsf{H}$ algebra with its characteristic polynomial $\mathsf{H}(\mathsf{H}^2+\mathsf{I})=0$
-to obtain an expression for $\mathsf{S}^{-1}(\bfOmega_a)$. As an interesting fact, we meet the Rodrigues Jacobians again
+to obtain an expression for $\mathsf{S}^{-1}(\bfOmega)$. As an interesting fact, we meet the Rodrigues Jacobians again
 \begin{multline}
-    \mathsf{S}^{-1}(\bfOmega_a) = (1-x)\mathsf{I} + x\, {\bf r}_a{\bf r}_a^T - {1\over 2}[\bfOmega_a]_\times \\
-    = \mathsf{J}_{\omega_r}(-\bfOmega_a) = \mathsf{J}_{\omega_l}(\bfOmega_a)\;.
+    \mathsf{S}^{-1}(\bfOmega) = (1-x)\mathsf{I} + x\, {\bf r}{\bf r}^T - {1\over 2}[\bfOmega]_\times \\
+    = \mathsf{J}_{\omega_r}(-\bfOmega) = \mathsf{J}_{\omega_l}(\bfOmega)\;.
     \label{eq:Sinvidentity}
 \end{multline}
-Since $\mathsf{S}^{-1} = \mathsf{J}_{\omega_l}$, the determinant
-of $\mathsf{S}^{-1}$ is $\det\mathsf{J}_{\omega_l} = (1-x)^2 + \Theta^2/4$,
-confirming invertibility for all $\Theta \in [0,\pi]$. This is
-consistent with~(\ref{eq:detS}): $\det\mathsf{S} = 2(1-\cos\Theta)/\Theta^2$
-and $\det\mathsf{S}^{-1} = \Theta^2/(2(1-\cos\Theta))$.
+Since $\mathsf{S}^{-1} = \mathsf{J}_{\omega_l}$, the determinant is $\det\mathsf{J}_{\omega_l} = (1-x)^2 + \Theta^2/4$ and hence $\det\mathsf{S} = 2(1-\cos\Theta)/\Theta^2$, confirming invertibility for all $\Theta \in [0,\pi]$.
 
 Further, one can show that
 \beq
-    \mathsf{S}^{-1}(\bfOmega_a)\mathsf{R}(\bfOmega_a) = \mathsf{R}(\bfOmega_a)\mathsf{S}^{-1}(\bfOmega_a) =
-    \mathsf{J}_{\omega_r}(\bfOmega_a),
+    \mathsf{S}^{-1}(\bfOmega)\mathsf{R}(\bfOmega) = \mathsf{R}(\bfOmega)\mathsf{S}^{-1}(\bfOmega) =
+    \mathsf{J}_{\omega_r}(\bfOmega),
     \label{eq:SinvRidentity}
 \eeq
-The coupling Jacobian $\mathsf{J}_{t_r}$ is defined by
+The coupling Jacobian $\mathsf{J}_{t}$ is defined by
 \beq
-    \mathsf{J}_{t}(\bfOmega_a,{\bf t}_a) = {\partial [\mathsf{S}^{-1}(\bfOmega_a){\bf T}_a] \over
-    \partial \bfOmega_a} \, \mathsf{J}_{\omega_r}(\bfOmega_a),\quad {\bf T}_a = \mathsf{S}(\bfOmega_a) \, {\bf t}_a,
+    \mathsf{J}_{t}(\bfOmega,{\bf t}) = {\partial [\mathsf{S}^{-1}(\bfOmega){\bf T}] \over
+    \partial \bfOmega} \, \mathsf{J}_{\omega_r}(\bfOmega),\quad {\bf T} = \mathsf{S}(\bfOmega) \, {\bf t},
     \label{eq:couplingJacobian}
 \eeq
 where the derivative $\partial[\mathsf{S}^{-1}(\bfOmega){\bf T}]/\partial\bfOmega$
