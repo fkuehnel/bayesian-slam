@@ -60,7 +60,7 @@ The verification process uncovered errors in the original 2008 formulation:
 .
 ├── README.md                          # This file
 ├── paper/
-│   ├── SE3_inference_paper.tex        # Main manuscript (LaTeX, ~1980 lines)
+│   ├── SE3_inference_paper.tex        # Main manuscript (LaTeX, ~2200 lines)
 │   └── robustEst.tex                  # Original 2008 technical report (reference)
 ├── verification/
 │   ├── SE3AlgebraVerification.m       # Mathematica: 24 verified identities (SO3/SE3/BCH/Jacobians)
@@ -68,21 +68,25 @@ The verification process uncovered errors in the original 2008 formulation:
 │   └── CouplingJacobianDerivation.m   # Mathematica: symbolic derivation of d[S⁻¹T]/dΩ, equivalence proof
 ├── rust/
 │   ├── Cargo.toml
-│   └── src/
-│       ├── lib.rs                     # Array-based linalg: Vec3/Mat3/Vec6/Mat6
-│       ├── so3.rs                     # SO(3): Rodrigues exp/log, S matrix, S⁻¹
-│       ├── se3.rs                     # SE(3): Pose struct, compose/inverse/act/exp/log
-│       ├── bch.rs                     # Finite BCH via SU(2) quaternions, phase reflection, Jacobians
-│       ├── jacobians.rs               # J_ωr, J_ωl, J_t coupling (analytic T-form), 6×6 SE(3) Jacobian
-│       ├── projective.rs              # Pinhole camera, derivatives through 3rd order, third cumulants
-│       ├── saddlepoint.rs             # Landmark optimization, saddlepoint correction, validity guard
-│       └── propagation.rs             # First/second-order covariance transport, MC validation
+│   ├── src/
+│   │   ├── lib.rs                     # Array-based linalg: Vec3/Mat3/Vec6/Mat6
+│   │   ├── so3.rs                     # SO(3): Rodrigues exp/log, S matrix, S⁻¹
+│   │   ├── se3.rs                     # SE(3): Pose struct, compose/inverse/act/exp/log
+│   │   ├── bch.rs                     # Finite BCH via SU(2) quaternions, phase reflection, Jacobians
+│   │   ├── jacobians.rs              # J_ωr, J_ωl, J_t coupling (analytic T-form), 6×6 SE(3) Jacobian
+│   │   ├── projective.rs             # Pinhole camera, derivatives through 3rd order, third cumulants
+│   │   ├── saddlepoint.rs            # Landmark optimization, saddlepoint correction, validity guard
+│   │   └── propagation.rs            # First/second-order covariance transport, MC validation
+│   └── examples/
+│       ├── bias_experiment.rs         # Experiment 1: L1 vs L2 coordinate bias (21× ratio)
+│       ├── multicam_saddlepoint.rs    # Multi-camera saddlepoint with point cloud & camera sweep
+│       └── multicam_experiment.rs     # Extended multi-camera analysis
 └── experiments/                       # Planned: scripts reproducing paper figures
 ```
 
 ## Rust Implementation
 
-**85 tests passing, 0 failures, 0 warnings.**
+**88 tests passing, 0 failures, 0 warnings.**
 
 | Module | Tests | Status | Description |
 |--------|-------|--------|-------------|
@@ -112,6 +116,7 @@ The verification process uncovered errors in the original 2008 formulation:
 - **Defensive numerics**: Validity guard on saddlepoint (|c₁| > 0.5 → fall back to Laplace), Taylor expansions near singularities (Θ → 0, ε → 0)
 - **Exhaustive FD validation**: Every Jacobian and derivative tested against central finite differences
 
+
 ### Getting Started
 
 ```bash
@@ -127,9 +132,9 @@ cargo test -- --nocapture  # see diagnostic output
 
 | Item | Priority | Description |
 |------|----------|-------------|
-| `propagation.rs` | ✅ Done | First/second-order covariance propagation with MC validation (85 tests total) |
+| `propagation.rs` | ✅ Done | First/second-order covariance propagation with MC validation (88 tests total) |
+| Multi-camera saddlepoint | ✅ Done | `multicam_saddlepoint.rs`: 2–12 cameras, point cloud, camera-count sweep |
 | Experiment figures | High | Generate paper figures from Rust (bias scatter, propagation accuracy, convergence) |
-| Multi-camera saddlepoint | Medium | Extend saddlepoint to landmarks seen from multiple cameras (sum of information matrices) |
 | Closed-form Q₄ | Low | Replace FD-based quartic contraction with analytic fourth derivatives of projective model |
 | t-form J_t option | Low | Add alternative `j_coupling_tform` using the S−S⁻¹(−Ω) structure (proven equivalent) |
 
@@ -143,6 +148,73 @@ cargo test -- --nocapture  # see diagnostic output
 | Third derivative sign | ✅ Fixed: ∂³u/∂x₃'³ = −6u/x₃'³ |
 | SE(3) Jacobian FD test | ✅ Was `#[ignore]`, now passing (bug was in original j_coupling, not the formula) |
 | det S formula | ✅ Added det S = 2(1−cosΘ)/Θ² to paper Appendix A |
+
+## Notation Correspondence with Solà et al. / Barfoot
+
+The paper includes Appendix F (§F) that maps our conventions to those of Solà, Deray & Atchuthan ("A micro Lie theory," 2018) and Barfoot (*State Estimation for Robotics*, 2024). This assists readers familiar with either reference.
+
+### Block ordering
+
+The fundamental difference is tangent vector ordering:
+
+| | Solà/Barfoot (SDA) | This paper |
+|---|---|---|
+| Tangent vector | τ = [**ρ**; **θ**] (translation first) | τ = [**Ω**; **t**] (rotation first) |
+| Primary Jacobian | Left: J_l | Right: J_r = J_l(−τ) |
+
+All 6×6 matrices are related by the block permutation P = [[0, I₃]; [I₃, 0]], i.e. **M** = P **M**^SDA P.
+
+### Key object correspondence
+
+| Object | SDA / Barfoot | This paper | Relationship |
+|---|---|---|---|
+| S matrix | **V**(θ), Eq. 174 | **S**(Ω) | Identical formula |
+| S⁻¹ | (not identified) | **S**⁻¹ = J_ωl | **Our identity** |
+| Adjoint | [[R, [t]×R]; [0, R]] | [[R, 0]; [[T]×R, R]] | Block permutation |
+| 6×6 left Jac | [[J_l, **Q**]; [0, J_l]] | [[J_ωl, 0]; [Q̃, J_ωl]] | Block permutation |
+| 6×6 right Jac | J_l(−ρ,−θ) | [[J_ωr, 0]; [J_t, J_ωr]] | Block permutation |
+| Coupling block | **Q**(ρ,θ) (Barfoot, 4-line expansion) | J_t (compact T-form) | J_t = Q(−t,−Ω)·J_ωr |
+| Point action Jac | [R, −R[p]×] | [−R[x]×, I] | Block swap; body frame |
+
+### Three additional identities (not in SDA/Barfoot)
+
+1. **S⁻¹ = J_ωl = J_ωr(−Ω)** — Halves cost: evaluate J_ωl instead of inverting S numerically. Also implies S⁻¹R = RS⁻¹ = J_ωr.
+
+2. **det S = 2(1 − cos Θ)/Θ²** — Exact volume element for Lie-Cartan coordinate chart. Needed for density transformations between [Ω, t] and [Ω, T] coordinates. Continuous at Θ = 0 (det S → 1), vanishes at Θ = π.
+
+3. **Compact T-form coupling Jacobian** — Single-line formula for ∂[S⁻¹T]/∂Ω using scalar coefficients x, α and outer products, replacing Barfoot's four-line iterated cross-product expansion. Proven algebraically equivalent in Mathematica (CouplingJacobianDerivation.m, Step 5).
+
+## Multi-Camera Saddlepoint Experiment
+
+The `multicam_saddlepoint` example demonstrates saddlepoint-corrected landmark marginalization with 2–12 cameras observing a shared 3D point cloud in a ring configuration.
+
+### Results: Camera-count sweep (test point at origin)
+
+| N_cam | views | σ_depth | σ/depth | c₁ |
+|------:|------:|--------:|--------:|---:|
+| 2 | 2 | 0.028 | 0.0037 | 7.5×10⁻³ |
+| 3 | 3 | 0.031 | 0.0041 | −1.2×10⁻⁶ |
+| 4 | 4 | 0.028 | 0.0037 | −3.5×10⁻⁵ |
+| 6 | 6 | 0.023 | 0.0031 | −2.4×10⁻⁵ |
+| 8 | 8 | 0.020 | 0.0026 | −1.8×10⁻⁵ |
+| 12 | 12 | 0.016 | 0.0022 | −1.2×10⁻⁵ |
+
+**Key finding:** The stereo case (2 cameras) produces the largest saddlepoint correction (~200× larger than 4-camera), confirming that the correction matters most in the typical multi-view operating regime where depth is constrained by triangulation parallax.
+
+### Stereo full point cloud (2 cameras, 30 landmarks)
+
+- 100% saddlepoint validity across all landmarks
+- Individual corrections up to c₁ ≈ 9×10⁻³
+- Cumulative correction: Σ|Δ| = 4.4×10⁻²
+- Correction dominated by negative Q₄ term (depth non-Gaussianity)
+
+### Usage
+
+```bash
+cargo run --release --example multicam_saddlepoint [N_cameras] [N_landmarks]
+cargo run --release --example multicam_saddlepoint 4 20   # default
+cargo run --release --example multicam_saddlepoint 2 30   # stereo
+```
 
 ## Mathematica Verification Scripts
 
