@@ -4,3 +4,6 @@
 *.dvi
 
 .DS_Store
+
+# Rust build artifacts
+rust/target/
