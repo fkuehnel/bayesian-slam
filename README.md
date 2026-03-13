@@ -8,9 +8,9 @@
 
 This repository accompanies the paper *Higher-Order Uncertainty Propagation and Saddlepoint Marginalization on the SE(3) Lie Group*, which develops a self-contained framework for Bayesian inference over rigid body poses.
 
-**Paper:** [SE3_inference_paper.pdf](paper/higherorder.pdf)
+**Paper:** [SE3_inference_paper.pdf](paper/highorder.pdf)
 
-The core ideas originate from work at NASA Ames Research Center (2008) on robust pose estimation using the SE(3) Lie group structure. This project refocuses that foundational material—stripping away the SLAM-specific framing—into three standalone contributions aimed at the broader estimation and inference community. All formulas have been verified symbolically (Mathematica) and numerically (Rust, finite differences, Monte Carlo).
+The core ideas originate from work at NASA Ames Research Center (2008) on robust pose estimation using the SE(3) Lie group structure. This project refocuses that foundational material into three standalone contributions aimed at the broader estimation and inference community. All formulas have been verified symbolically (Mathematica) and numerically (Rust finite differences, Python, Monte Carlo).
 
 ## What This Paper Contributes
 
@@ -44,14 +44,15 @@ The paper provides a self-contained reference for the SE(3) machinery, all symbo
 - Phase reflection handling at Θ = π with cutline analysis
 - Wei-Norman formula and both left/right Rodrigues Jacobians
 - Key identities: S⁻¹ = J_ωl, S⁻¹R = RS⁻¹ = J_ωr (verified to machine precision)
+- det S = 2(1−cosΘ)/Θ² (strictly positive, guarantees invertibility)
 
 ## Errata from Original Tech Report
 
-The symbolic verification process uncovered three errors in the original 2008 formulation:
+The verification process uncovered errors in the original 2008 formulation:
 
 1. **Third derivative sign** (Appendix E, Eq. thirdderivs): ∂³u/∂x₃'³ = **−6u/x₃'³** (was +6u/x₃'³)
 2. **Saddlepoint formula** (Appendix E, Eq. saddlepointfull): The original (5/24)A + (1/8)Q₄ was incorrect. The correct formula is **(1/12)A + (1/8)B − (1/8)Q₄** with two distinct contraction types and a sign flip on the quartic term.
-3. **Coupling Jacobian** (Appendix C, Eq. dSinvTdOmega): The first term used the exponential coordinate **t** where the physical translation **T** was required. The Rust implementation uses numerical differentiation of S⁻¹(Ω)·T pending a corrected closed-form derivation.
+3. **Coupling Jacobian** (Appendix C, Eq. dSinvTdOmega): The original formula used the exponential coordinate **t** where the physical translation **T** was required in the leading skew-symmetric term. A corrected T-form with a new scalar α = (sinΘ − Θ)/(2(1−cosΘ)) has been derived and verified. **Symbolic proof confirms both the T-form and the corrected t-form (with S−S⁻¹(−Ω) structure) are algebraically equivalent** when T = S(Ω)t.
 
 ## Repository Structure
 
@@ -59,11 +60,12 @@ The symbolic verification process uncovered three errors in the original 2008 fo
 .
 ├── README.md                          # This file
 ├── paper/
-│   ├── SE3_inference_paper.tex        # Main manuscript (LaTeX, ~1950 lines)
+│   ├── SE3_inference_paper.tex        # Main manuscript (LaTeX, ~1980 lines)
 │   └── robustEst.tex                  # Original 2008 technical report (reference)
 ├── verification/
 │   ├── SE3AlgebraVerification.m       # Mathematica: 24 verified identities (SO3/SE3/BCH/Jacobians)
-│   └── SaddlepointVerification.m      # Mathematica: projective derivs, saddlepoint formula, quadrature
+│   ├── SaddlepointVerification.m      # Mathematica: projective derivs, saddlepoint formula, quadrature
+│   └── CouplingJacobianDerivation.m   # Mathematica: symbolic derivation of d[S⁻¹T]/dΩ, equivalence proof
 ├── rust/
 │   ├── Cargo.toml
 │   └── src/
@@ -71,7 +73,7 @@ The symbolic verification process uncovered three errors in the original 2008 fo
 │       ├── so3.rs                     # SO(3): Rodrigues exp/log, S matrix, S⁻¹
 │       ├── se3.rs                     # SE(3): Pose struct, compose/inverse/act/exp/log
 │       ├── bch.rs                     # Finite BCH via SU(2) quaternions, phase reflection, Jacobians
-│       ├── jacobians.rs              # J_ωr, J_ωl, J_t coupling, 6×6 SE(3) Jacobian
+│       ├── jacobians.rs              # J_ωr, J_ωl, J_t coupling (analytic T-form), 6×6 SE(3) Jacobian
 │       ├── projective.rs             # Pinhole camera, derivatives through 3rd order, third cumulants
 │       └── saddlepoint.rs            # Landmark optimization, saddlepoint correction, validity guard
 └── experiments/                       # Planned: scripts reproducing paper figures
@@ -86,17 +88,18 @@ The symbolic verification process uncovered three errors in the original 2008 fo
 | `so3` | 8 | ✅ | Rodrigues exp/log, hat/vee, S matrix, S⁻¹ |
 | `se3` | 8 | ✅ | Pose compose/inverse/act, exp/log roundtrip |
 | `bch` | 30 | ✅ | Finite BCH via SU(2), phase reflection, composition Jacobians |
-| `jacobians` | 13 | ✅ | J_ωr/J_ωl, coupling J_t, 6×6 SE(3) Jacobian (FD-verified) |
+| `jacobians` | 13 | ✅ | J_ωr/J_ωl, analytic J_t (T-form), 6×6 SE(3) Jacobian (FD-verified) |
 | `projective` | 11 | ✅ | Project, Jacobian, Hessian, 3rd derivs, third cumulants (all FD-verified) |
 | `saddlepoint` | 7 | ✅ | Landmark GN optimizer, corrected c₁ formula, validity guard, Q₄ by FD |
 
-### Key verified identities (Rust + Mathematica)
+### Key verified identities (Rust + Mathematica + Python)
 
 - BCH composition matches matrix log(R_a R_b) to 10⁻¹⁶ across all angle regimes
 - Phase reflection at Θ > π produces correct (−r, 2π−Θ) identification
 - Composition Jacobians ∂Ω_c/∂Ω_a, ∂Ω_c/∂Ω_b match FD to 10⁻⁸
 - S⁻¹R = J_ωr verified symbolically and numerically
 - Full 6×6 SE(3) Jacobian block structure [[J_ωr, 0], [J_t, J_ωr]] verified to 10⁻⁹
+- **Coupling Jacobian J_t**: analytic T-form verified to 7.3×10⁻¹⁰ against FD; symbolic equivalence with t-form proven in Mathematica
 - Projective derivatives through 3rd order verified against FD
 - Saddlepoint correction matches numerical quadrature to 6 significant figures
 
@@ -110,7 +113,7 @@ The symbolic verification process uncovered three errors in the original 2008 fo
 ### Getting Started
 
 ```bash
-git clone https://github.com/[username]/se3-inference.git
+git clone https://github.com/fkuehnel/bayesian-slam.git
 cd se3-inference/rust
 
 cargo build --release
@@ -120,12 +123,24 @@ cargo test -- --nocapture  # see diagnostic output
 
 ### Pending Work
 
-| Item | Description |
-|------|-------------|
-| `propagation.rs` | First/second-order covariance propagation module (entry point: `bch::compose_jacobians`) |
-| Closed-form J_t | Derive corrected ∂[S⁻¹T]/∂Ω formula (currently using FD) |
-| Experiment figures | Generate paper figures from Rust (bias scatter, propagation accuracy, convergence) |
-| Multi-camera saddlepoint | Extend saddlepoint to landmarks seen from multiple cameras |
+| Item | Priority | Description |
+|------|----------|-------------|
+| `propagation.rs` | High | First/second-order covariance propagation module (entry point: `bch::compose_jacobians`) |
+| Experiment figures | High | Generate paper figures from Rust (bias scatter, propagation accuracy, convergence) |
+| Multi-camera saddlepoint | Medium | Extend saddlepoint to landmarks seen from multiple cameras (sum of information matrices) |
+| Closed-form Q₄ | Low | Replace FD-based quartic contraction with analytic fourth derivatives of projective model |
+| t-form J_t option | Low | Add alternative `j_coupling_tform` using the S−S⁻¹(−Ω) structure (proven equivalent) |
+
+### Resolved Items
+
+| Item | Resolution |
+|------|------------|
+| Closed-form J_t | ✅ Derived T-form with α = (sinΘ−Θ)/(2(1−cosΘ)), verified to 7.3×10⁻¹⁰ |
+| T-form / t-form equivalence | ✅ Proven symbolically in Mathematica (`CouplingJacobianDerivation.m`, Step 5) |
+| Saddlepoint correction formula | ✅ Corrected to c₁ = (1/12)A + (1/8)B − (1/8)Q₄, verified against quadrature |
+| Third derivative sign | ✅ Fixed: ∂³u/∂x₃'³ = −6u/x₃'³ |
+| SE(3) Jacobian FD test | ✅ Was `#[ignore]`, now passing (bug was in original j_coupling, not the formula) |
+| det S formula | ✅ Added det S = 2(1−cosΘ)/Θ² to paper Appendix A |
 
 ## Mathematica Verification Scripts
 
@@ -134,7 +149,7 @@ cargo test -- --nocapture  # see diagnostic output
 | Part | What | Result |
 |------|------|--------|
 | 1–2 | H algebra, Rodrigues formula, R^T R = I, det = 1 | Symbolic ✓ |
-| 3–4 | S·S⁻¹ = I, S⁻¹ = J_ωl, S⁻¹R = J_ωr, det J_ωr | Symbolic ✓ |
+| 3–4 | S·S⁻¹ = I, S⁻¹ = J_ωl, S⁻¹R = J_ωr, det S, det J_ωr | Symbolic ✓ |
 | 5 | BCH finite composition vs matrix log(R_a R_b) | 10⁻¹⁶ (5 cases) |
 | 6 | SU(2) quaternions, double cover R(q) = R(−q) | 10⁻¹⁶ |
 | 7 | J_ωr from BCH differentiation vs analytic | 6×10⁻¹⁰ |
@@ -157,6 +172,17 @@ cargo test -- --nocapture  # see diagnostic output
 | 7b | Prior strength sweep, regime classification | (σ/depth)² scaling confirmed |
 | 9 | Symbolic P×Hess decomposition of f''' | Exact match |
 | 10 | Depth scaling analysis | (σ_z/depth)² confirmed |
+
+### CouplingJacobianDerivation.m — d[S⁻¹T]/dΩ from first principles
+
+| Step | What | Result |
+|------|------|--------|
+| 1–2 | Symbolic S⁻¹, chain rule d/dΩ through (θ, r) | Exact 3×3 expression |
+| 3 | Symbolic derivative vs FD | 1.74×10⁻⁸ |
+| 4 | Three candidate formulas vs FD | (numerical evaluation has scoping issue) |
+| 5 | **T-form vs exact symbolic derivative** | Verified (see symbolic output) |
+| 5 | **T-form(T=St) − t-form = 0** | **ZERO (proven)** — algebraic equivalence |
+| 6 | Diagnosis of original Rust bug | Formula correct; implementation error |
 
 ## Publication Target
 

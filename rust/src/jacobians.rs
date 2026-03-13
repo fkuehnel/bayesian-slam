@@ -81,37 +81,51 @@ pub fn j_omega_right_inv(omega: &Vec3) -> Mat3 {
 /// Paper Eqs. (couplingJacobian), (dSinvTdOmega):
 ///   J_t = ∂[S⁻¹(Ω)·T]/∂Ω · J_ωr(Ω),  T = S(Ω)·t
 ///
-/// The derivative ∂[S⁻¹T]/∂Ω (with T the physical translation, held
-/// fixed) is computed numerically via central finite differences.
-/// This avoids a known sign/variable error in the analytic formula
-/// from the original tech report (which used t where T was required
-/// in the skew-symmetric term). The numerical derivative is accurate
-/// to ~10⁻¹⁰ and the function is not in any inner loop.
+/// The derivative ∂[S⁻¹T]/∂Ω is computed analytically using the
+/// corrected formula (Paper Eq. dSinvTdOmega):
+///
+///   ∂[S⁻¹T]/∂Ω = ½[T]× + (x/Θ)rTᵀ + α Trᵀ + T̄[(x/Θ)I − (2x/Θ+α)rrᵀ]
+///
+/// where T̄ = r·T, α = (sinΘ − Θ)/(2(1−cosΘ)), and T is the
+/// physical translation (NOT the exponential coordinate t).
 pub fn j_coupling(omega: &Vec3, t_exp: &Vec3) -> Mat3 {
     let theta = norm3(omega);
     if theta < EPS {
-        // At Ω=0: S=I, T=t, d[S⁻¹T]/dΩ = ½[T]× = ½[t]×
-        // J_wr = I, so J_t = ½[t]×
+        // At Ω=0: S=I, T=t, ∂[S⁻¹T]/∂Ω = ½[T]× = ½[t]×, J_ωr = I
         return scale_mat3(0.5, &so3::hat(t_exp));
     }
 
-    // Physical translation T = S(Ω)·t (held fixed during differentiation)
+    let r = scale3(1.0 / theta, omega);
+    let omx = one_minus_x(theta);
+    let x = 1.0 - omx;
+
+    // Physical translation T = S(Ω)·t
     let big_t = mv3(&so3::s_matrix(omega), t_exp);
+    let t_bar = dot3(&r, &big_t); // axial component T̄ = r·T
 
-    // d[S⁻¹(Ω)·T]/dΩ by central finite differences
-    let h = 1e-8;
-    let mut ds_inv_t = [[0.0; 3]; 3];
-    for j in 0..3 {
-        let mut wp = *omega; wp[j] += h;
-        let mut wm = *omega; wm[j] -= h;
-        let vp = mv3(&so3::s_inv(&wp), &big_t);
-        let vm = mv3(&so3::s_inv(&wm), &big_t);
-        for i in 0..3 {
-            ds_inv_t[i][j] = (vp[i] - vm[i]) / (2.0 * h);
-        }
-    }
+    // α = (sinΘ − Θ) / (2(1 − cosΘ))
+    let alpha = if theta < 1e-4 {
+        // Taylor: α = −Θ/6 − Θ³/360 − ...
+        -theta / 6.0 - theta * theta * theta / 360.0
+    } else {
+        (theta.sin() - theta) / (2.0 * (1.0 - theta.cos()))
+    };
 
-    // J_t = d[S⁻¹T]/dΩ · J_ωr(Ω)
+    // ∂[S⁻¹T]/∂Ω = ½[T]× + (x/Θ)rTᵀ + α Trᵀ + T̄[(x/Θ)I − (2x/Θ+α)rrᵀ]
+    let x_over_th = x / theta;
+    let coeff_rrt = 2.0 * x_over_th + alpha;
+
+    let mut ds_inv_t = [[0.0f64; 3]; 3];
+    let hat_t = so3::hat(&big_t);
+    for i in 0..3 { for j in 0..3 {
+        ds_inv_t[i][j] = 0.5 * hat_t[i][j]              // ½[T]×
+            + x_over_th * r[i] * big_t[j]                 // (x/Θ) r Tᵀ
+            + alpha * big_t[i] * r[j]                      // α T rᵀ
+            + t_bar * (x_over_th * I3[i][j]                // T̄(x/Θ)I
+                - coeff_rrt * r[i] * r[j]);                // − T̄(2x/Θ+α)rrᵀ
+    }}
+
+    // J_t = ∂[S⁻¹T]/∂Ω · J_ωr(Ω)
     mm3(&ds_inv_t, &j_omega_right(omega))
 }
 
