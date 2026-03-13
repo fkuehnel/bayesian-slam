@@ -107,73 +107,98 @@ in the pose parameters. Standard Laplace approximations
 mode and curvature, missing asymmetry and heavier tails.
 \end{enumerate}
 
-This paper addresses both limitations within a unified $SE(3)$ 
-framework, providing:
+This paper does not propose a new basic calculus for Lie groups;
+rather, it develops a higher-order probabilistic inference framework
+on top of the standard $SE(3)$ machinery used in robotics.
+Its contributions are fourfold:
 
 \begin{itemize}
-\item Exact first-order and systematic second-order mean and 
-covariance propagation formulas for $SE(3)$ composition, 
-derived from a closed-form Baker-Campbell-Hausdorff (BCH) 
-formula via the $SU(2)/\mathbb{Z}_2 \cong SO(3)$ double cover.
+\item A bias analysis of pose parametrization showing that
+Lie-Cartan coordinates of the first kind provide the natural
+centered coordinates for Gaussian perturbations on $SE(3)$,
+whereas second-kind translational coordinates inherit bias
+through the nonlinear rotation--translation coupling.
 
-\item A saddlepoint approximation for marginalizing latent 
-Euclidean variables (3D landmarks) from the joint posterior, 
-yielding a more accurate marginal over $SE(3)$ than the 
-standard Laplace/Gauss-Newton approach.
+\item Closed-form first- and second-order propagation formulas
+for uncertain pose composition and point transformation on
+the full $SE(3)$ group, including the coupling Jacobian
+$\mathsf{J}_t(\bfOmega,\mathbf{t})$.
 
-\item Complete, closed-form expressions for all required 
-$SE(3)$ Jacobians, including the rotation-translation 
-coupling Jacobian $\mathsf{J}_t(\bfOmega, \mathbf{t})$, 
-with careful treatment of the phase reflection singularity 
-at $\Theta = \pi$.
+\item A saddlepoint marginalization method for eliminating
+Euclidean latent variables from projective pose-landmark
+posteriors, yielding a more accurate pose marginal than the
+standard Laplace/Gauss--Newton approximation.
+
+\item A closed-form finite Rodrigues/BCH composition formula
+via the $SU(2)$ double cover, including explicit treatment of
+the phase-reflection boundary at $\Theta=\pi$.
 \end{itemize}
 
 \subsection{Related Work}
 
-The use of Lie group structure for pose estimation has a long 
-history. Pennec and Thirion~\cite{pennec97} introduced 
-compositional noise models on $SE(3)$. The invariant EKF 
-(IEKF)~\cite{barrau2017invariant} showed that group-affine 
-observation models yield autonomous error dynamics. 
-Sol\`{a} et al.~\cite{sola2018micro} provided a widely-used 
-reference for Lie group operations in robotics. 
-Barfoot~\cite{barfoot2024} gave a comprehensive textbook treatment.
-Forster et al.~\cite{forster2017manifold} developed 
-IMU preintegration on manifolds using first-order propagation.
+The use of Lie groups in robotics and estimation is by now
+well established. Pennec and Thirion~\cite{pennec97}
+introduced compositional uncertainty models on $SE(3)$.
+The invariant EKF literature, including Barrau and Bonnabel,
+showed how group-affine system structure yields autonomous
+error dynamics and improved consistency properties.
+Sol\`a et al.~\cite{sola2018micro} and Barfoot~\cite{barfoot2024}
+provided widely used references for the differential calculus of
+$SO(3)$ and $SE(3)$, including exponential and logarithmic
+maps, adjoints, Jacobians, and covariance transport.
+Forster et al.~\cite{forster2017manifold} demonstrated the
+practical importance of this framework through manifold-based
+IMU preintegration. These works established the modern
+first-order calculus on Lie groups that underlies much of
+contemporary SLAM, visual odometry, and state estimation.
 
-On uncertainty propagation specifically, 
-Chirikjian~\cite{chirikjian2012stochastic} developed Fourier 
-analysis on Lie groups for global distributions. 
-Ye and Chirikjian~\cite{ye2024uncertainty} recently addressed 
-propagation via stochastic differential equations on unimodular 
-groups. Wang and Chirikjian~\cite{wang2008nonparametric} 
-explored non-parametric approaches. 
-Bourmaud et al.~\cite{bourmaud2013discrete} proposed a 
-discrete extended Kalman filter on Lie groups.
+A second line of work studies uncertainty on Lie groups beyond
+local linearization. Chirikjian~\cite{chirikjian2012stochastic}
+developed global stochastic models and harmonic-analysis
+methods on Lie groups. Wang and Chirikjian~\cite{wang2008nonparametric}
+considered nonparametric uncertainty representations, while
+Ye and Chirikjian~\cite{ye2024uncertainty} studied propagation
+through stochastic differential equations on unimodular groups.
+Bourmaud et al.~\cite{bourmaud2013discrete} developed
+Lie-group variants of recursive estimators. These works make
+clear that uncertainty on nonlinear groups cannot always be
+captured adequately by Euclidean first-order approximations,
+but they do not provide the closed-form higher-order
+$SE(3)$ propagation formulas developed here for the specific
+right-compositional Gaussian model used in robotics.
 
-The present work extends the author's earlier 
+The present paper also builds on the author's earlier
 contributions~\cite{kuehnel2004,kuehnel2005,kuehnel2008}.
-In~\cite{kuehnel2004}, the role of Lie-Cartan exponential 
-coordinates for unbiased pose estimation and the 
-marginalized MAP estimator were first introduced in 
-the context of Bayesian inference on $SE(3)$.
-In~\cite{kuehnel2005}, the graphical model structure 
-of the SLAM problem was addressed via local frame 
-junction trees exploiting the frame dependence of 
-observations. The present paper refocuses and extends 
-that foundational work: the second-order propagation 
-formulas and saddlepoint marginalization are new.
+In~\cite{kuehnel2004}, Lie-Cartan coordinates of the first kind
+and the marginalized MAP viewpoint for Bayesian inference on
+$SE(3)$ were introduced. In~\cite{kuehnel2005}, the graphical
+structure of SLAM was analyzed using local-frame junction
+trees. The present work substantially extends that foundation:
+it develops explicit second-order propagation formulas on the
+full $SE(3)$ group, establishes the parametrization-bias
+distinction between first- and second-kind coordinates,
+derives a saddlepoint correction for marginalizing Euclidean
+latent variables under projective observation models, and
+provides a closed-form finite Rodrigues/BCH treatment via
+the $SU(2)$ double cover with explicit handling of phase
+reflection at $\Theta=\pi$.
 
-Despite this body of work, several gaps remain:
-(i)~closed-form second-order propagation formulas for the 
-full $SE(3)$ group (not just $SO(3)$) are not available 
-in the literature;
-(ii)~the saddlepoint approximation for marginalizing 
-Euclidean latent variables from an $SE(3)$ posterior has 
-not been developed;
-(iii)~the detailed algebra connecting the $SU(2)$ double 
-cover to finite Rodrigues vector composition with phase 
-reflection handling is scattered and incomplete.
+The novelty of this paper is therefore not a new basic Lie
+theory for $SE(3)$ itself, but a new higher-order inference
+framework built on top of standard Lie-group foundations.
+Specifically, the paper contributes:
+(i) closed-form first- and second-order propagation of mean
+and covariance for uncertain compositions on $SE(3)$,
+including the rotation-translation coupling Jacobian;
+(ii) a bias analysis showing why first-kind exponential
+coordinates provide the natural centered parametrization for
+Gaussian perturbations, whereas second-kind translational
+coordinates inherit systematic bias through the nonlinear
+coupling map; and
+(iii) a saddlepoint marginalization scheme for projective
+pose-landmark models that improves on the standard
+Laplace/Schur approximation while preserving the reduced
+pose-only formulation.
 
 \subsection{Paper Organization}
 
@@ -1021,54 +1046,54 @@ model~\eqref{eq:gaussianSE3}.
 \label{sec:conclusion}
 %% ====================================================================
 
-We have presented three contributions to Bayesian 
-inference on $SE(3)$:
+We have presented a higher-order probabilistic inference
+framework on $SE(3)$ built on standard Lie-group
+foundations but going beyond the first-order approximations
+used in most current estimation pipelines.
 
-\begin{enumerate}
-\item A complete, closed-form algebra for $SE(3)$ 
-uncertainty propagation, including the coupling Jacobian 
-$\mathsf{J}_t(\bfOmega, \mathbf{t})$, with explicit 
-second-order corrections to both mean and covariance.
-Monte Carlo validation confirms a $1.8\times$ improvement 
-in covariance accuracy at $\sigma_\omega \approx 0.2$~rad,
-with the improvement scaling as $\sigma_\omega^4$.
+First, we showed that the choice of pose parametrization is
+not merely notational: Lie-Cartan coordinates of the first kind
+provide the natural centered coordinates for Gaussian
+perturbations on $SE(3)$, whereas second-kind translational
+coordinates inherit systematic bias through the nonlinear
+rotation--translation coupling.
 
-\item A saddlepoint marginalization scheme~\eqref{eq:saddlebody}
-that eliminates latent Euclidean variables from the joint 
-posterior more accurately than the standard Laplace 
-(Gauss-Newton) approximation.
-The correction involves two distinct contraction types
-of the third derivatives (cross and trace) plus a 
-quartic term, and improves the marginal integral by 
-up to $\sim 3000\times$ over Laplace in the perturbative 
-regime ($\sigma_{\rm depth}/x_3' \lesssim 0.3$).
+Second, we derived complete closed-form first- and
+second-order propagation formulas for uncertain compositions
+and transformed points on the full $SE(3)$ group, including
+the rotation--translation coupling Jacobian
+$\mathsf{J}_t(\bfOmega,\mathbf{t})$. Monte Carlo validation
+confirms a substantial improvement over first-order covariance
+transport, with the gain scaling consistently with the predicted
+higher-order error terms.
 
-\item A closed-form BCH formula for finite Rodrigues 
-vector composition via $SU(2)$, with careful treatment 
-of phase reflection at $\Theta = \pi$.
-Numerical verification confirms machine-precision
-accuracy across all angle regimes, with quantified
-truncation orders for the BCH series
-(Table~\ref{tab:bchorder}).
-\end{enumerate}
+Third, we developed a saddlepoint marginalization scheme for
+projective pose-landmark models. Unlike the standard
+Laplace/Schur approximation, the proposed correction captures
+the leading asymmetry of the landmark conditional while
+retaining a reduced pose-only optimization problem. In the
+perturbative regime, this yields large improvements in marginal
+accuracy over Laplace while preserving computational
+structure compatible with bundle-adjustment pipelines.
 
-All formulas have been verified symbolically in
-Mathematica and numerically against finite differences
-and Monte Carlo references. The framework is applicable 
-beyond pose estimation to any domain requiring 
-probabilistic inference on $SE(3)$: IMU preintegration, 
-spacecraft attitude determination, surgical robot 
-registration, and multi-body dynamics.
+Finally, we gave a closed-form finite Rodrigues/BCH
+composition formula via the $SU(2)$ double cover together
+with explicit treatment of the phase-reflection boundary at
+$\Theta=\pi$, thereby completing the algebraic machinery
+required by the higher-order developments in the paper.
 
-Future work will address: (i)~recursive (filtering) 
-implementations with the second-order corrections;
-(ii)~extension to outlier-robust estimation via 
-MAPSAC-type methods; (iii)~application to 
-visual-inertial odometry with preintegration on 
-manifolds; (iv)~deriving a closed-form expression
-for $\partial[\mathsf{S}^{-1}\mathbf{T}]/\partial\bfOmega$
-to replace the current numerical differentiation
-in the coupling Jacobian.
+Taken together, these results position the paper not as another
+introductory account of Lie groups for robotics, but as a
+contribution to higher-order Bayesian inference on $SE(3)$.
+The framework is relevant to pose estimation, visual-inertial
+odometry, preintegration, registration, and other applications
+where first-order Gaussian approximations on rigid-body
+motion become a limiting factor.
+
+Natural next steps include recursive filtering variants of the
+second-order formulas, robustified versions of the marginalized
+objective for outlier-prone data, and integration into large-scale
+visual-inertial and SLAM systems.
 
 %% ====================================================================
 \appendix
