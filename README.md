@@ -8,7 +8,7 @@
 
 This repository accompanies the paper *Higher-Order Uncertainty Propagation and Saddlepoint Marginalization on the SE(3) Lie Group*, which develops a self-contained framework for Bayesian inference over rigid body poses.
 
-**Paper:** [SE3_inference_paper.tex](paper/higherorder.tex)
+**Paper:** [SE3_inference_paper.pdf](paper/higherorder.pdf)
 
 The core ideas originate from work at NASA Ames Research Center (2008) on robust pose estimation using the SE(3) Lie group structure. This project refocuses that foundational material into three standalone contributions aimed at the broader estimation and inference community. All formulas have been verified symbolically (Mathematica) and numerically (Rust finite differences, Python, Monte Carlo).
 
