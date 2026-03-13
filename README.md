@@ -1,6 +1,6 @@
 # Higher-Order Uncertainty Propagation and Saddlepoint Marginalization on SE(3)
 
-**Author:** Frank O. Kuehnel
+**Author:** Frank O. Kuehnel — Excel Solutions LLC
 
 ---
 
@@ -8,7 +8,7 @@
 
 This repository accompanies the paper *Higher-Order Uncertainty Propagation and Saddlepoint Marginalization on the SE(3) Lie Group*, which develops a self-contained framework for Bayesian inference over rigid body poses.
 
-**Paper:** [SE3_inference_paper.pdf](paper/highorder.pdf)
+**Paper:** [SE3_inference_paper.tex](paper/higherorder.tex)
 
 The core ideas originate from work at NASA Ames Research Center (2008) on robust pose estimation using the SE(3) Lie group structure. This project refocuses that foundational material into three standalone contributions aimed at the broader estimation and inference community. All formulas have been verified symbolically (Mathematica) and numerically (Rust finite differences, Python, Monte Carlo).
 
@@ -73,15 +73,16 @@ The verification process uncovered errors in the original 2008 formulation:
 │       ├── so3.rs                     # SO(3): Rodrigues exp/log, S matrix, S⁻¹
 │       ├── se3.rs                     # SE(3): Pose struct, compose/inverse/act/exp/log
 │       ├── bch.rs                     # Finite BCH via SU(2) quaternions, phase reflection, Jacobians
-│       ├── jacobians.rs              # J_ωr, J_ωl, J_t coupling (analytic T-form), 6×6 SE(3) Jacobian
-│       ├── projective.rs             # Pinhole camera, derivatives through 3rd order, third cumulants
-│       └── saddlepoint.rs            # Landmark optimization, saddlepoint correction, validity guard
+│       ├── jacobians.rs               # J_ωr, J_ωl, J_t coupling (analytic T-form), 6×6 SE(3) Jacobian
+│       ├── projective.rs              # Pinhole camera, derivatives through 3rd order, third cumulants
+│       ├── saddlepoint.rs             # Landmark optimization, saddlepoint correction, validity guard
+│       └── propagation.rs             # First/second-order covariance transport, MC validation
 └── experiments/                       # Planned: scripts reproducing paper figures
 ```
 
 ## Rust Implementation
 
-**75 tests passing, 0 failures, 0 warnings.**
+**85 tests passing, 0 failures, 0 warnings.**
 
 | Module | Tests | Status | Description |
 |--------|-------|--------|-------------|
@@ -91,6 +92,7 @@ The verification process uncovered errors in the original 2008 formulation:
 | `jacobians` | 13 | ✅ | J_ωr/J_ωl, analytic J_t (T-form), 6×6 SE(3) Jacobian (FD-verified) |
 | `projective` | 11 | ✅ | Project, Jacobian, Hessian, 3rd derivs, third cumulants (all FD-verified) |
 | `saddlepoint` | 7 | ✅ | Landmark GN optimizer, corrected c₁ formula, validity guard, Q₄ by FD |
+| `propagation` | 10 | ✅ | First/second-order covariance transport, Levi-Civita, Isserlis correction, MC validation |
 
 ### Key verified identities (Rust + Mathematica + Python)
 
@@ -114,7 +116,7 @@ The verification process uncovered errors in the original 2008 formulation:
 
 ```bash
 git clone https://github.com/fkuehnel/bayesian-slam.git
-cd se3-inference/rust
+cd bayesian-slam/rust
 
 cargo build --release
 cargo test
@@ -125,7 +127,7 @@ cargo test -- --nocapture  # see diagnostic output
 
 | Item | Priority | Description |
 |------|----------|-------------|
-| `propagation.rs` | High | First/second-order covariance propagation module (entry point: `bch::compose_jacobians`) |
+| `propagation.rs` | ✅ Done | First/second-order covariance propagation with MC validation (85 tests total) |
 | Experiment figures | High | Generate paper figures from Rust (bias scatter, propagation accuracy, convergence) |
 | Multi-camera saddlepoint | Medium | Extend saddlepoint to landmarks seen from multiple cameras (sum of information matrices) |
 | Closed-form Q₄ | Low | Replace FD-based quartic contraction with analytic fourth derivatives of projective model |

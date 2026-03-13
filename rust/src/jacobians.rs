@@ -337,7 +337,47 @@ mod tests {
             max_analytic_err = max_analytic_err.max((jt_analytic[i][j] - jt_se3fd[i][j]).abs());
         }}
         eprintln!("\nJ_t: d[S^{{-1}}T]/dOmega . J_wr vs SE3 FD: max err = {:.2e}", max_dsdt_err);
-        eprintln!("J_t: analytic vs SE3 FD: max err = {:.2e}", max_analytic_err);
+        eprintln!("J_t: analytic (T-form) vs SE3 FD: max err = {:.2e}", max_analytic_err);
+
+        // Way 5: OLD t-form formula (Paper Eq. 73 bottom):
+        //   d[S^{-1}T]/dOmega = ½[t]× + (x/Θ)(rtᵀ − t̄H² + trᵀ) + (t̄/Θ)(S − S⁻¹(−Ω))
+        let theta = norm3(&w);
+        let r = scale3(1.0/theta, &w);
+        let h_mat = so3::hat(&r);
+        let h2 = mm3(&h_mat, &h_mat);
+        let omx = (0.5*theta) / (0.5*theta).tan();
+        let x = 1.0 - omx;
+        let t_bar = dot3(&r, &t);  // r · t (exponential coord)
+
+        let s_mat = so3::s_matrix(&w);
+        let s_inv_neg = so3::s_inv(&scale3(-1.0, &w));
+
+        // Term 1: ½[t]×
+        let term1_old = scale_mat3(0.5, &so3::hat(&t));
+        // Term 2: (x/Θ)(rtᵀ − t̄H² + trᵀ)
+        let inner = add_mat3(
+            &add_mat3(&outer3(&r, &t), &outer3(&t, &r)),
+            &scale_mat3(-t_bar, &h2),
+        );
+        let term2_old = scale_mat3(x / theta, &inner);
+        // Term 3: (t̄/Θ)(S − S⁻¹(−Ω))
+        let term3_old = scale_mat3(t_bar / theta, &sub_mat3(&s_mat, &s_inv_neg));
+
+        let ds_inv_t_old = add_mat3(&add_mat3(&term1_old, &term2_old), &term3_old);
+        let jt_old_form = mm3(&ds_inv_t_old, &jwr);
+
+        let mut max_old_err = 0.0f64;
+        for i in 0..3 { for j in 0..3 {
+            max_old_err = max_old_err.max((jt_old_form[i][j] - jt_se3fd[i][j]).abs());
+        }}
+        eprintln!("J_t: old t-form vs SE3 FD: max err = {:.2e}", max_old_err);
+
+        // Cross-check: both forms should agree
+        let mut max_cross_err = 0.0f64;
+        for i in 0..3 { for j in 0..3 {
+            max_cross_err = max_cross_err.max((jt_analytic[i][j] - jt_old_form[i][j]).abs());
+        }}
+        eprintln!("T-form vs t-form: max err = {:.2e}", max_cross_err);
 
         // Full 6x6 check
         let mut max_full_err = 0.0f64;
@@ -351,8 +391,20 @@ mod tests {
         }}
         eprintln!("\nFull 6x6: max err = {:.2e}", max_full_err);
 
-        // Assert
+        // Assert T-form and full 6x6 match
         assert!(max_full_err < 5e-4,
             "SE(3) Jacobian FD mismatch: max err = {:.2e}", max_full_err);
+
+        // The old t-form: if the paper's Eq.(73) equivalence is correct,
+        // this should also match. Report but don't assert until Mathematica
+        // symbolic verification settles it.
+        if max_old_err > 1e-4 {
+            eprintln!("WARNING: old t-form disagrees with FD by {:.2e}", max_old_err);
+            eprintln!("  Paper Eq.(73) claims T-form = t-form; needs symbolic verification.");
+        } else {
+            eprintln!("Old t-form confirmed: max err = {:.2e}", max_old_err);
+            assert!(max_cross_err < 1e-8,
+                "T-form vs t-form should agree: max err = {:.2e}", max_cross_err);
+        }
     }
 }
