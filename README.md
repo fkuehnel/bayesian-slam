@@ -20,7 +20,7 @@ The core ideas originate from work at NASA Ames Research Center (2006) on [robus
 
 Current filters and optimizers (EKF, IEKF, factor graphs) propagate pose uncertainty using first-order Jacobians. On SE(3), the semi-direct product coupling between rotation and translation introduces systematic bias that first-order methods miss. We derive:
 
-- Closed-form composition Jacobians including the rotation-translation coupling Jacobian **J_t(Ω, t)**
+- Compact composition Jacobians including the a novel closed-form rotation-translation coupling Jacobian **J_t(Ω, t)**
 - Second-order corrections to both the mean and covariance of composed poses
 - Explicit formulas using the finite BCH composition via SU(2), avoiding truncated series
 
