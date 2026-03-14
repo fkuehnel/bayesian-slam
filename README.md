@@ -53,7 +53,7 @@ The paper provides a self-contained reference for the SE(3) machinery, all symbo
 ├── README.md                          # This file
 ├── paper/
 │   ├── SE3_inference_paper.tex        # Main manuscript (LaTeX, ~2200 lines)
-│   └── robustEst.tex                  # Original 2008 technical report (reference)
+│   └── robustEst.tex                  # Original 2006 technical report (reference)
 ├── verification/
 │   ├── SE3AlgebraVerification.m       # Mathematica: 24 verified identities (SO3/SE3/BCH/Jacobians)
 │   ├── SaddlepointVerification.m      # Mathematica: projective derivs, saddlepoint formula, quadrature
