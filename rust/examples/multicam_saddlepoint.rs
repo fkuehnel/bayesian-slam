@@ -188,7 +188,7 @@ fn main() {
     println!("  Sweet spot: 2-4 cameras (typical stereo/multi-view regime)\n");
 
     // CSV
-    let csv_path = "/mnt/user-data/outputs/multicam_saddlepoint.csv";
+    let csv_path = "../experiments/data/multicam_saddlepoint.csv";
     let mut csv = String::from("landmark,n_views,min_depth,c1,valid\n");
     for (li, nv, d, c, ok) in &records {
         csv.push_str(&format!("{},{},{:.6},{:.8e},{}\n", li, nv, d, c, ok));
