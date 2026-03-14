@@ -120,7 +120,8 @@ of that machinery, contributing:
 \item Closed-form first- and second-order propagation formulas
 for uncertain pose composition and point transformation on
 $SE(3)$, including the rotation--translation coupling Jacobian
-$\mathsf{J}_t(\bfOmega,\mathbf{t})$.
+$\mathsf{J}_t(\bfOmega,\mathbf{t})$ in a very compact
+form (\ref{eq:tformJt}).
  
 \item A bias analysis showing that Lie-Cartan coordinates of
 the first kind provide the natural centered parametrization
@@ -1592,6 +1593,31 @@ where
 Note that $\alpha < 0$ for all $\Theta > 0$ and $\alpha \neq \beta$ in general;
 only the transverse component ${\bf T}_\perp$ enters the rank-one terms,
 while the axial part $\bar T$ contributes solely through the projector ${\sf P}_\perp$.
+
+Equivalently, one can express $\mathsf{J}_t$ directly in exponential
+coordinates without evaluating $\mathsf{S}(\bfOmega)$.
+Noting that the rotation axis is an eigenvector $\mathsf{S}\,{\bf r} = {\bf r}$. Hence,
+the axial components coincide: $\bar T = {\bf r}\cdot{\bf T} = {\bf r}\cdot{\bf t} = \bar t$.
+Substituting ${\bf T} = \mathsf{S}\,{\bf t}$ into (\ref{eq:dSinvTdOmega})
+and composing with $\mathsf{J}_{\omega_r}$, all $\mathsf{S}$-dependent terms
+cancel, yielding the compact t-form
+\beq
+    \mathsf{J}_t(\bfOmega,{\bf t}) =
+    \tfrac{1}{2}[{\bf t}]_\times
+    + \beta\!\left({\bf r}{\bf t}^T + {\bf t}{\bf r}^T\right)
+    + \bar t\!\left[\gamma\,\mathsf{I} - \delta\,{\bf r}{\bf r}^T\right],
+    \label{eq:tformJt}
+\eeq
+where
+\beq
+    \gamma = \beta - \frac{x^2}{\Theta} - \frac{\Theta}{4}\,,\qquad
+    \delta = \gamma + 2\beta\,.
+    \label{eq:tformcoeffs}
+\eeq
+The T-form~(\ref{eq:dSinvTdOmega}) is preferred when ${\bf T}$ is already
+available; the t-form~(\ref{eq:tformJt}) avoids the $\mathsf{S}\cdot{\bf t}$
+multiplication and the $\mathsf{J}_{\omega_r}$ product entirely.
+
 These results finish the discourse on the $SE(3)$ composition Jacobians.
 
 \subsection{Additive versus compositive derivative}

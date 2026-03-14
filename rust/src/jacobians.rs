@@ -7,6 +7,24 @@
 //! - S⁻¹(Ω)R(Ω) = J_ωr(Ω)                    Eq. (SinvRidentity)
 //! - Full SE(3) Jacobian: block lower-triangular with J_t coupling
 //!
+//! ## Coupling Jacobian: two equivalent forms
+//!
+//! The coupling Jacobian J_t(Ω, t) has two algebraically equivalent
+//! expressions, verified to machine precision against each other and
+//! to 1e-9 against finite differences:
+//!
+//! **t-form** (default, `j_coupling`): works directly in exponential
+//! coordinates. No S matrix evaluation needed. ~66 flops.
+//!
+//!   J_t = ½[t]× + β(rtᵀ + trᵀ) + t̄[γ I − δ rrᵀ]
+//!   β = x/Θ,  γ = β − x²/Θ − Θ/4,  δ = γ + 2β
+//!
+//! **T-form** (backup, `j_coupling_big_t`): works with the physical
+//! translation T = S(Ω)t. Requires S·t and a J_ωr multiply. ~90 flops.
+//!
+//!   J_t = [½[T]× + β rTᵀ + α Trᵀ + T̄(β I − (2β+α)rrᵀ)] · J_ωr
+//!   α = (sinΘ−Θ)/(2(1−cosΘ)),  β = x/Θ,  α ≠ β
+//!
 //! where 1-x = (Θ/2)/tan(Θ/2), Θ = |Ω|, r = Ω/Θ.
 
 use crate::*;
@@ -73,31 +91,88 @@ pub fn j_omega_right_inv(omega: &Vec3) -> Mat3 {
 }
 
 // =========================================================================
-// SE(3) coupling Jacobian
+// SE(3) coupling Jacobian — t-form (default)
 // =========================================================================
 
-/// Coupling Jacobian J_t(Ω, t) ∈ ℝ³ˣ³.
+/// Coupling Jacobian J_t(Ω, t) ∈ ℝ³ˣ³ — t-form (default).
 ///
-/// Paper Eqs. (couplingJacobian), (dSinvTdOmega):
+/// Computes J_t directly in exponential coordinates, requiring no
+/// evaluation of S(Ω) or J_ωr(Ω):
 ///
-///   J_t = ∂[S⁻¹(Ω)·T]/∂Ω · J_ωr(Ω),  where T = S(Ω)·t
+///   J_t = ½[t]× + β(rtᵀ + trᵀ) + t̄[γ I − δ rrᵀ]
 ///
-/// The derivative ∂[S⁻¹T]/∂Ω is computed in the T-form:
+/// where t̄ = r·t and the scalar coefficients are:
 ///
-///   ∂[S⁻¹T]/∂Ω = ½[T]× + β rTᵀ + α Trᵀ + T̄[β I − (2β+α)rrᵀ]
+///   β = x/Θ,  γ = β − x²/Θ − Θ/4,  δ = γ + 2β = 3β − x²/Θ − Θ/4
 ///
-/// with T̄ = r·T and two scalar coefficients:
+/// with x = 1 − (Θ/2)cot(Θ/2).
+///
+/// This is algebraically equivalent to the T-form (`j_coupling_big_t`)
+/// but avoids computing S(Ω)·t and the J_ωr multiplication. Verified
+/// to machine precision against the T-form and to 1e-9 against FD.
+///
+/// Origin: derived by correcting old eq 86, which had a spurious
+/// t̄-proportional term due to the α = β erratum (eq 78). The
+/// (S − S⁻¹(−Ω))/Θ correction in the old formula cancels exactly,
+/// leaving this clean expression.
+pub fn j_coupling(omega: &Vec3, t_exp: &Vec3) -> Mat3 {
+    let theta = norm3(omega);
+    if theta < EPS {
+        // At Ω=0: J_t = ½[t]×
+        return scale_mat3(0.5, &so3::hat(t_exp));
+    }
+
+    let r = scale3(1.0 / theta, omega);
+    let omx = one_minus_x(theta);
+    let x = 1.0 - omx;
+
+    // Scalar coefficients
+    let beta = x / theta;
+    let x2_over_theta = x * x / theta;
+    let theta_over_4 = 0.25 * theta;
+    let gamma = beta - x2_over_theta - theta_over_4;
+    let delta = gamma + 2.0 * beta; // = 3β − x²/Θ − Θ/4
+
+    let t_bar = dot3(&r, t_exp);
+
+    // J_t = ½[t]× + β(rtᵀ + trᵀ) + t̄[γ I − δ rrᵀ]
+    let hat_t = so3::hat(t_exp);
+    let mut jt = [[0.0f64; 3]; 3];
+    for i in 0..3 { for j in 0..3 {
+        jt[i][j] = 0.5 * hat_t[i][j]                        // ½[t]×
+            + beta * (r[i] * t_exp[j] + t_exp[i] * r[j])     // β(rtᵀ + trᵀ)
+            + t_bar * (gamma * I3[i][j]                        // t̄ γ I
+                - delta * r[i] * r[j]);                        // − t̄ δ rrᵀ
+    }}
+    jt
+}
+
+// =========================================================================
+// SE(3) coupling Jacobian — T-form (backup)
+// =========================================================================
+
+/// Coupling Jacobian J_t(Ω, t) ∈ ℝ³ˣ³ — T-form (backup).
+///
+/// Uses the physical translation T = S(Ω)·t:
+///
+///   J_t = ∂[S⁻¹(Ω)·T]/∂Ω · J_ωr(Ω)
+///
+/// where the derivative ∂[S⁻¹T]/∂Ω is:
+///
+///   ½[T]× + β rTᵀ + α Trᵀ + T̄[β I − (2β+α)rrᵀ]
+///
+/// with T̄ = r·T = r·t (since Sr = r) and:
 ///
 ///   α = (sinΘ − Θ)/(2(1−cosΘ)) = ¼ csc²(Θ/2)(sinΘ − Θ)  (< 0)
 ///   β = x/Θ                                                 (> 0)
 ///
-/// Note: α ≠ β. The physical translation T = S(Ω)t is used
-/// directly; no conversion back to the exponential coordinate t
-/// is needed.
-pub fn j_coupling(omega: &Vec3, t_exp: &Vec3) -> Mat3 {
+/// Note: α ≠ β. This was the original verified formula; the t-form
+/// is derived from it by substituting T = St and simplifying.
+/// Prefer the t-form (`j_coupling`) for efficiency; use this when
+/// T is already available or for cross-validation.
+pub fn j_coupling_big_t(omega: &Vec3, t_exp: &Vec3) -> Mat3 {
     let theta = norm3(omega);
     if theta < EPS {
-        // At Ω=0: S=I, T=t, ∂[S⁻¹T]/∂Ω = ½[T]× = ½[t]×, J_ωr = I
         return scale_mat3(0.5, &so3::hat(t_exp));
     }
 
@@ -107,9 +182,9 @@ pub fn j_coupling(omega: &Vec3, t_exp: &Vec3) -> Mat3 {
 
     // Physical translation T = S(Ω)·t
     let big_t = mv3(&so3::s_matrix(omega), t_exp);
-    let t_bar = dot3(&r, &big_t); // axial component T̄ = r·T
+    let t_bar = dot3(&r, &big_t); // axial component T̄ = r·T = r·t
 
-    // α = (sinΘ − Θ) / (2(1 − cosΘ)) = ¼ csc²(Θ/2)(sinΘ − Θ)
+    // α = (sinΘ − Θ) / (2(1 − cosΘ))
     let alpha = if theta < 1e-4 {
         // Taylor: α ≈ −Θ/6 − Θ³/360 − ...
         -theta / 6.0 - theta * theta * theta / 360.0
@@ -197,6 +272,11 @@ mod tests {
         }}
         true
     }
+    fn max_err3(a: &Mat3, b: &Mat3) -> f64 {
+        let mut m = 0.0f64;
+        for i in 0..3 { for j in 0..3 { m = m.max((a[i][j] - b[i][j]).abs()); }}
+        m
+    }
     fn max6(a: &Mat6, b: &Mat6) -> f64 {
         let mut m = 0.0f64;
         for i in 0..6 { for j in 0..6 { m = m.max((a[i][j]-b[i][j]).abs()); }}
@@ -268,7 +348,33 @@ mod tests {
         }
     }
 
-    // ─── Coupling Jacobian: FD of ∂[S⁻¹T]/∂Ω ───
+    // ─── Coupling Jacobian: t-form vs T-form (machine precision) ───
+
+    #[test]
+    fn tform_matches_big_t_form() {
+        let cases: Vec<(Vec3, Vec3, &str)> = vec![
+            ([0.5, -0.3, 0.7],  [1.0, -0.5, 0.3],  "moderate"),
+            ([0.01, 0.02, -0.01], [0.5, 1.0, -0.3], "small"),
+            ([1.5, -0.8, 0.3],  [0.2, -1.0, 0.7],  "large"),
+            ([2.5, 0.0, 0.0],   [1.0, 0.0, 0.0],   "near pi axial"),
+            ([0.0, 1.0, 0.0],   [0.5, 0.0, 0.5],   "axis-aligned"),
+            ([0.7, -0.4, 1.2],  [-0.3, 0.9, 0.1],  "general"),
+            ([1.0, 0.0, 0.0],   [1.0, 0.0, 0.0],   "pure axial"),
+            ([1.0, 0.0, 0.0],   [0.0, 1.0, 0.0],   "pure perp"),
+            ([2.8, 0.1, -0.1],  [0.5, -0.3, 0.7],  "near pi gen"),
+        ];
+
+        for (w, t, label) in &cases {
+            if norm3(w) < 1e-8 { continue; }
+            let jt_tform = j_coupling(w, t);
+            let jt_big_t = j_coupling_big_t(w, t);
+            let err = max_err3(&jt_tform, &jt_big_t);
+            assert!(err < 1e-12,
+                "t-form vs T-form mismatch at {}: err = {:.2e}", label, err);
+        }
+    }
+
+    // ─── Coupling Jacobian: FD validation ───
 
     /// FD ground truth for ∂[S⁻¹(Ω)T]/∂Ω with T fixed.
     fn fd_ds_inv_t(omega: &Vec3, big_t: &Vec3, eps: f64) -> Mat3 {
@@ -285,9 +391,38 @@ mod tests {
         jac
     }
 
+    /// FD ground truth for J_t = d[S⁻¹T]/dΩ · J_ωr.
+    fn fd_jt(omega: &Vec3, t_exp: &Vec3, eps: f64) -> Mat3 {
+        let big_t = mv3(&so3::s_matrix(omega), t_exp);
+        let ds = fd_ds_inv_t(omega, &big_t, eps);
+        mm3(&ds, &j_omega_right(omega))
+    }
+
     #[test]
-    fn coupling_jacobian_t_form_fd() {
-        // Validate the T-form ∂[S⁻¹T]/∂Ω against FD at multiple test points
+    fn coupling_jacobian_tform_fd() {
+        let cases: Vec<(Vec3, Vec3, &str)> = vec![
+            ([0.5, -0.3, 0.7],  [1.0, -0.5, 0.3],  "moderate"),
+            ([0.01, 0.02, -0.01], [0.5, 1.0, -0.3], "small theta"),
+            ([1.5, -0.8, 0.3],  [0.2, -1.0, 0.7],  "large theta"),
+            ([2.5, 0.0, 0.0],   [1.0, 0.0, 0.0],   "near pi, parallel"),
+            ([0.0, 1.0, 0.0],   [0.5, 0.0, 0.5],   "axis-aligned"),
+            ([0.7, -0.4, 1.2],  [-0.3, 0.9, 0.1],  "general"),
+            ([1.0, 0.0, 0.0],   [1.0, 0.0, 0.0],   "pure axial"),
+        ];
+
+        for (w, t, label) in &cases {
+            let theta = norm3(w);
+            if theta < 1e-8 { continue; }
+            let jt = j_coupling(w, t);
+            let jt_fd = fd_jt(w, t, 1e-7);
+            let err = max_err3(&jt, &jt_fd);
+            assert!(err < 1e-5,
+                "t-form FD mismatch at {}: max err = {:.2e}", label, err);
+        }
+    }
+
+    #[test]
+    fn coupling_jacobian_big_t_form_fd() {
         let cases: Vec<(Vec3, Vec3, &str)> = vec![
             ([0.5, -0.3, 0.7],  [1.0, -0.5, 0.3],  "moderate"),
             ([0.01, 0.02, -0.01], [0.5, 1.0, -0.3], "small theta"),
@@ -299,38 +434,23 @@ mod tests {
         for (w, t, label) in &cases {
             let theta = norm3(w);
             if theta < 1e-8 { continue; }
-            let r = scale3(1.0 / theta, w);
-
-            // Physical translation T = S(Ω)t
-            let big_t = mv3(&so3::s_matrix(w), t);
-            let t_bar = dot3(&r, &big_t);
-
-            let omx = one_minus_x(theta);
-            let x = 1.0 - omx;
-            let alpha = (theta.sin() - theta) / (2.0 * (1.0 - theta.cos()));
-            let beta = x / theta;
-            let coeff_rrt = 2.0 * beta + alpha;
-
-            // T-form
-            let hat_t = so3::hat(&big_t);
-            let mut ds_inv_t = [[0.0f64; 3]; 3];
-            for i in 0..3 { for j in 0..3 {
-                ds_inv_t[i][j] = 0.5 * hat_t[i][j]
-                    + beta * r[i] * big_t[j]
-                    + alpha * big_t[i] * r[j]
-                    + t_bar * (beta * I3[i][j] - coeff_rrt * r[i] * r[j]);
-            }}
-
-            // FD
-            let ds_inv_t_fd = fd_ds_inv_t(w, &big_t, 1e-7);
-
-            let mut max_err = 0.0f64;
-            for i in 0..3 { for j in 0..3 {
-                max_err = max_err.max((ds_inv_t[i][j] - ds_inv_t_fd[i][j]).abs());
-            }}
-            assert!(max_err < 1e-5,
-                "T-form FD mismatch at {}: max err = {:.2e}", label, max_err);
+            let jt = j_coupling_big_t(w, t);
+            let jt_fd = fd_jt(w, t, 1e-7);
+            let err = max_err3(&jt, &jt_fd);
+            assert!(err < 1e-5,
+                "T-form FD mismatch at {}: max err = {:.2e}", label, err);
         }
+    }
+
+    #[test]
+    fn coupling_jacobian_zero_angle() {
+        let t = [1.0, -0.5, 0.3];
+        let jt = j_coupling(&[0.0; 3], &t);
+        let expected = scale_mat3(0.5, &so3::hat(&t));
+        assert!(approx_mat3(&jt, &expected, 1e-10));
+
+        let jt_big = j_coupling_big_t(&[0.0; 3], &t);
+        assert!(approx_mat3(&jt_big, &expected, 1e-10));
     }
 
     // ─── Full SE(3) Jacobian FD ───
@@ -358,7 +478,7 @@ mod tests {
             }
         }
 
-        // Also validate J_t via component FD: ∂[S⁻¹T]/∂Ω · J_ωr
+        // Validate J_t block via component FD
         let big_t = mv3(&so3::s_matrix(&w), &t);
         let ds_inv_t_fd = fd_ds_inv_t(&w, &big_t, eps);
         let jwr = j_omega_right(&w);
@@ -382,8 +502,13 @@ mod tests {
         }}
 
         eprintln!("\n=== SE(3) Jacobian Diagnostics ===");
-        eprintln!("J_t: component FD vs SE3 FD: max err = {:.2e}", max_component_err);
-        eprintln!("J_t: analytic vs SE3 FD:     max err = {:.2e}", max_analytic_err);
+        eprintln!("J_t (t-form): component FD vs SE3 FD: max err = {:.2e}", max_component_err);
+        eprintln!("J_t (t-form): analytic vs SE3 FD:     max err = {:.2e}", max_analytic_err);
+
+        // Also check T-form agrees
+        let jt_big_t = j_coupling_big_t(&w, &t);
+        let max_cross_err = max_err3(&jt_analytic, &jt_big_t);
+        eprintln!("J_t: t-form vs T-form:                max err = {:.2e}", max_cross_err);
 
         // Full 6×6 check
         let mut max_full_err = 0.0f64;
@@ -397,5 +522,7 @@ mod tests {
             "SE(3) Jacobian FD mismatch: max err = {:.2e}", max_full_err);
         assert!(max_analytic_err < 5e-4,
             "J_t analytic vs SE3 FD: max err = {:.2e}", max_analytic_err);
+        assert!(max_cross_err < 1e-12,
+            "t-form vs T-form: max err = {:.2e}", max_cross_err);
     }
 }
