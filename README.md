@@ -171,7 +171,7 @@ python experiments/plot_bias_experiment.py
 # → paper/figures/bias_scatter_rotation.{pgf,png}
 ```
 
-See [experiments/PLOTTING.md](experiments/PLOTTING.md) for style conventions and the template for new plot scripts.
+See [experiments/README.md](experiments/README.md) for style conventions and the template for new plot scripts.
 
 ### Experiment 2: Pose Inference (`pose_inference`)
 
@@ -240,7 +240,7 @@ own fonts. PNG previews are saved alongside for quick inspection.
 The full guide — shared style conventions, color palette, figure sizing
 for IEEE column widths, a copy-paste template for new plot scripts, and
 LaTeX integration instructions — lives in
-**[experiments/PLOTTING.md](experiments/PLOTTING.md)**.
+**[experiments/README.md](experiments/README.md)**.
 
 ### Quick reference
 
@@ -294,7 +294,7 @@ checklist in [experiments/README.md §4](experiments/README.md).
 
 | Item | Resolution |
 |------|------------|
-| Plotting workflow | ✅ Documented in [experiments/PLOTTING.md](experiments/PLOTTING.md): shared style, PGF pipeline, templates, LaTeX integration |
+| Plotting workflow | ✅ Documented in [experiments/README.md](experiments/README.md): shared style, PGF pipeline, templates, LaTeX integration |
 | Pose inference example | ✅ `rust/examples/pose_inference.rs`: full 6D Newton with SP-corrected marginal, 1D sweep + comparison |
 | Closed-form J_t | ✅ Derived T-form with α = (sinΘ−Θ)/(2(1−cosΘ)), verified to 7.3×10⁻¹⁰ |
 | T-form symbolic proof | ✅ Proven in Mathematica: 9/9 Ω substitutions with symbolic T (`verification/CouplingJacobianDerivation.m`) |
