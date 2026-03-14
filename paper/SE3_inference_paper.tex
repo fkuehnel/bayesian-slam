@@ -1571,23 +1571,27 @@ The coupling Jacobian $\mathsf{J}_{t}$ is defined by
 where the derivative $\partial[\mathsf{S}^{-1}(\bfOmega){\bf T}]/\partial\bfOmega$
 is taken with the physical translation ${\bf T}$ held fixed
 and only $\bfOmega$ varying in $\mathsf{S}^{-1}$.
-Differentiating $\mathsf{S}^{-1}(\bfOmega)$ with respect to $\bfOmega$
-and applying to the fixed vector ${\bf T}$ yields:
+Decomposing ${\bf T}$ into axial and transverse components,
+$\bar T = {\bf r}\cdot{\bf T}$ and
+${\bf T}_\perp = {\sf P}_\perp{\bf T} = {\bf T} - \bar T\,{\bf r}$,
+with ${\sf P}_\perp = \mathsf{I} - {\bf r}{\bf r}^T$,
+differentiating yields the compact form
 \beq
     \frac{\partial[\mathsf{S}^{-1}{\bf T}]}{\partial\bfOmega} =
-    \frac{1}{2}[{\bf T}]_\times + \beta\,{\bf r}{\bf T}^T
-    + \alpha\,{\bf T}{\bf r}^T
-    + \bar T\!\left[\beta\,\mathsf{I}
-    - (2\beta+\alpha)\,{\bf r}{\bf r}^T\right],
+    \frac{1}{2}[{\bf T}]_\times
+    + \beta\,({\bf r}{\bf T}_\perp^T + \bar T\,{\sf P}_\perp)
+    + \alpha\,{\bf T}_\perp{\bf r}^T\,,
     \label{eq:dSinvTdOmega}
 \eeq
-where $\bar T = {\bf r}\cdot{\bf T}$ is the axial component of ${\bf T}$ and
+where
 \beq
-    \alpha = {1\over 4}\csc^2{\Theta\over 2}\,(\sin\Theta - \Theta)\,,\quad
-    \beta = {1\over\Theta} - {1\over 2}\cot{\Theta\over2}\,.
+    \alpha = {1\over 4}\csc^2{\Theta\over 2}\,(\sin\Theta - \Theta)\,,\qquad
+    \beta = {1\over\Theta} - {1\over 2}\cot{\Theta\over 2}\,.
     \label{eq:alphabetadef}
 \eeq
-Note that $\alpha<0$ for all $\Theta>0$ and $\alpha\neq\beta$ in general.
+Note that $\alpha < 0$ for all $\Theta > 0$ and $\alpha \neq \beta$ in general;
+only the transverse component ${\bf T}_\perp$ enters the rank-one terms,
+while the axial part $\bar T$ contributes solely through the projector ${\sf P}_\perp$.
 These results finish the discourse on the $SE(3)$ composition Jacobians.
 
 \subsection{Additive versus compositive derivative}
