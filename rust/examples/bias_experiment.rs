@@ -327,7 +327,16 @@ fn main() {
     }
 
     // ─── Write CSV for plotting ───
-    let csv_path = "/mnt/user-data/outputs/bias_experiment.csv";
+    let csv_path = std::path::Path::new("/mnt/user-data/outputs/bias_experiment.csv");
+    if let Some(parent) = csv_path.parent() {
+        std::fs::create_dir_all(parent).unwrap_or_else(|e| {
+            panic!(
+                "Failed to create output directory '{}': {}\n\
+                 Please create it manually: mkdir -p {}",
+                parent.display(), e, parent.display()
+            );
+        });
+    }
     let mut csv = String::new();
     csv.push_str("l1_omega1,l1_omega2,l1_omega3,l1_t1,l1_t2,l1_t3,l2_domega1,l2_domega2,l2_domega3,l2_dt1,l2_dt2,l2_dt3\n");
     for i in 0..l1_samples.len() {
@@ -338,6 +347,11 @@ fn main() {
             l2_trans_samples[i][0], l2_trans_samples[i][1], l2_trans_samples[i][2],
         ));
     }
-    std::fs::write(csv_path, &csv).expect("Failed to write CSV");
-    println!("\n  CSV written to: {}", csv_path);
+    std::fs::write(csv_path, &csv).unwrap_or_else(|e| {
+        panic!(
+            "Failed to write CSV to '{}': {}",
+            csv_path.display(), e
+        );
+    });
+    println!("\n  CSV written to: {}", csv_path.display());
 }

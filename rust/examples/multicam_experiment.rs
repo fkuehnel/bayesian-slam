@@ -395,7 +395,21 @@ fn main() {
     }
 
     // Write CSV
-    let csv_path = "/mnt/user-data/outputs/multicam_saddlepoint.csv";
-    std::fs::write(csv_path, &csv).expect("Failed to write CSV");
-    println!("\n  CSV written to: {}", csv_path);
+    let csv_path = std::path::Path::new("/mnt/user-data/outputs/multicam_saddlepoint.csv");
+    if let Some(parent) = csv_path.parent() {
+        std::fs::create_dir_all(parent).unwrap_or_else(|e| {
+            panic!(
+                "Failed to create output directory '{}': {}\n\
+                 Please create it manually: mkdir -p {}",
+                parent.display(), e, parent.display()
+            );
+        });
+    }
+    std::fs::write(csv_path, &csv).unwrap_or_else(|e| {
+        panic!(
+            "Failed to write CSV to '{}': {}",
+            csv_path.display(), e
+        );
+    });
+    println!("\n  CSV written to: {}", csv_path.display());
 }
