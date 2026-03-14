@@ -9,12 +9,12 @@ second-kind (additive) coordinate errors.
 Outputs PGF files for direct inclusion in LaTeX documents (text is
 rendered by LaTeX using your document fonts) as well as PNG previews.
 
-Usage:
+Usage (from repo root):
     python experiments/plot_bias_experiment.py [path/to/bias_experiment.csv]
 
-Default CSV path: /mnt/user-data/outputs/bias_experiment.csv
-Output: saves figures next to the CSV as bias_scatter_translation.{pgf,png}
-        and bias_scatter_rotation.{pgf,png}
+Default CSV path: experiments/data/bias_experiment.csv
+Output:           paper/figures/bias_scatter_translation.{pgf,png}
+                  paper/figures/bias_scatter_rotation.{pgf,png}
 """
 
 import sys
@@ -25,6 +25,13 @@ import matplotlib
 matplotlib.use("pgf")
 import matplotlib.pyplot as plt
 
+# ── Paths (repo-relative, work from any working directory) ──────
+REPO_ROOT   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR    = os.path.join(REPO_ROOT, "experiments", "data")
+FIG_DIR     = os.path.join(REPO_ROOT, "paper", "figures")
+DEFAULT_CSV = os.path.join(DATA_DIR, "bias_experiment.csv")
+
+# ── Shared style ────────────────────────────────────────────────
 matplotlib.rcParams.update({
     "pgf.texsystem": "pdflatex",
     "font.family": "serif",
@@ -93,14 +100,16 @@ def scatter_pair(ax_l1, ax_l2, l1, l2, comp_x, comp_y, labels, title_prefix):
 
 
 def main():
-    csv_path = sys.argv[1] if len(sys.argv) > 1 else "/mnt/user-data/outputs/bias_experiment.csv"
+    csv_path = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_CSV
     if not os.path.isfile(csv_path):
         print(f"Error: CSV not found at {csv_path}")
-        print("Run the Rust experiment first:")
-        print("  cargo run --release --example bias_experiment")
+        print("Run the Rust experiment first (from repo root):")
+        print("  cd rust && cargo run --release --example bias_experiment && cd ..")
+        print(f"Then ensure CSV is at: {DEFAULT_CSV}")
         sys.exit(1)
 
-    out_dir = os.path.dirname(csv_path) or "."
+    os.makedirs(FIG_DIR, exist_ok=True)
+
     d = load_csv(csv_path)
     n = len(d["l1_t"])
     print(f"Loaded {n} samples from {csv_path}")
@@ -121,7 +130,7 @@ def main():
     )
     fig.tight_layout(rect=[0, 0, 1, 0.92])
     for ext in ("pgf", "png"):
-        path1 = os.path.join(out_dir, f"bias_scatter_translation.{ext}")
+        path1 = os.path.join(FIG_DIR, f"bias_scatter_translation.{ext}")
         fig.savefig(path1, dpi=150)
         print(f"Saved {path1}")
     plt.close(fig)
@@ -141,7 +150,7 @@ def main():
     )
     fig.tight_layout(rect=[0, 0, 1, 0.92])
     for ext in ("pgf", "png"):
-        path2 = os.path.join(out_dir, f"bias_scatter_rotation.{ext}")
+        path2 = os.path.join(FIG_DIR, f"bias_scatter_rotation.{ext}")
         fig.savefig(path2, dpi=150)
         print(f"Saved {path2}")
     plt.close(fig)
