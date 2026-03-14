@@ -57,7 +57,7 @@ The paper provides a self-contained reference for the SE(3) machinery, all symbo
 ├── verification/
 │   ├── SE3AlgebraVerification.m       # Mathematica: 24 verified identities (SO3/SE3/BCH/Jacobians)
 │   ├── SaddlepointVerification.m      # Mathematica: projective derivs, saddlepoint formula, quadrature
-│   └── CouplingJacobianDerivation.m   # Mathematica: symbolic derivation of d[S⁻¹T]/dΩ, equivalence proof
+│   └── CouplingJacobianDerivation.m   # Mathematica: symbolic proof of d[S⁻¹T]/dΩ (9/9 Omega subs)
 ├── rust/
 │   ├── Cargo.toml
 │   ├── src/
@@ -65,14 +65,15 @@ The paper provides a self-contained reference for the SE(3) machinery, all symbo
 │   │   ├── so3.rs                     # SO(3): Rodrigues exp/log, S matrix, S⁻¹
 │   │   ├── se3.rs                     # SE(3): Pose struct, compose/inverse/act/exp/log
 │   │   ├── bch.rs                     # Finite BCH via SU(2) quaternions, phase reflection, Jacobians
-│   │   ├── jacobians.rs               # J_ωr, J_ωl, J_t coupling (analytic T-form), 6×6 SE(3) Jacobian
-│   │   ├── projective.rs              # Pinhole camera, derivatives through 3rd order, third cumulants
-│   │   ├── saddlepoint.rs             # Landmark optimization, saddlepoint correction, validity guard
-│   │   └── propagation.rs             # First/second-order covariance transport, MC validation
+│   │   ├── jacobians.rs              # J_ωr, J_ωl, J_t coupling (analytic T-form), 6×6 SE(3) Jacobian
+│   │   ├── projective.rs             # Pinhole camera, derivatives through 3rd order, third cumulants
+│   │   ├── saddlepoint.rs            # Landmark optimization, saddlepoint correction, validity guard
+│   │   └── propagation.rs            # First/second-order covariance transport, MC validation
 │   └── examples/
 │       ├── bias_experiment.rs         # Experiment 1: L1 vs L2 coordinate bias (21× ratio)
-│       ├── multicam_saddlepoint.rs    # Multi-camera saddlepoint with point cloud & camera sweep
-│       └── multicam_experiment.rs     # Extended multi-camera analysis
+│       ├── pose_inference.rs          # Experiment 2: pose estimation with SP-corrected marginal
+│       ├── multicam_saddlepoint.rs    # Experiment 3: multi-camera saddlepoint with camera sweep
+│       └── multicam_experiment.rs     # Experiment 4: extended multi-camera analysis with MC truth
 └── experiments/                       # Planned: scripts reproducing paper figures
 ```
 
@@ -97,7 +98,7 @@ The paper provides a self-contained reference for the SE(3) machinery, all symbo
 - Composition Jacobians ∂Ω_c/∂Ω_a, ∂Ω_c/∂Ω_b match FD to 10⁻⁸
 - S⁻¹R = J_ωr verified symbolically and numerically
 - Full 6×6 SE(3) Jacobian block structure [[J_ωr, 0], [J_t, J_ωr]] verified to 10⁻⁹
-- **Coupling Jacobian J_t**: analytic T-form verified to 7.3×10⁻¹⁰ against FD; symbolic equivalence with t-form proven in Mathematica
+- **Coupling Jacobian J_t**: analytic T-form verified to 7.3×10⁻¹⁰ against FD; symbolic equivalence proven in Mathematica (9/9 substitutions)
 - Projective derivatives through 3rd order verified against FD
 - Saddlepoint correction matches numerical quadrature to 6 significant figures
 
@@ -120,22 +121,98 @@ cargo test
 cargo test -- --nocapture  # see diagnostic output
 ```
 
+## Examples
+
+### Experiment 1: Coordinate Bias (`bias_experiment`)
+
+Demonstrates that Lie-Cartan exponential coordinates (first kind) produce unbiased pose estimates while second-kind (additive) coordinates [Ω, T] show systematic translational bias. This validates Proposition 1 in the paper (§II.3).
+
+**Setup:** A camera at a known pose observes N landmarks with Gaussian noise. The pose is estimated by point cloud alignment (Gauss-Newton on SE(3)). Repeated over 2000 noise realizations, the empirical mean is compared in both coordinate systems.
+
+**Paper config** (N=3, σ=1.0): produces a dramatic 21× bias ratio, demonstrating the effect with few, noisy landmarks.
+
+**Mild config** (N=8, σ=0.5): ~3× ratio, showing the effect persists with more landmarks and lower noise.
+
+```bash
+cargo run --release --example bias_experiment          # paper config: N=3, σ=1.0
+cargo run --release --example bias_experiment mild     # mild config: N=8, σ=0.5
+```
+
+**Output:**
+- Console: mean and std in L1 (exponential) and L2 (additive) coordinates, bias ratio
+- CSV: `bias_experiment.csv` with per-sample data for scatter plots (paper Figs. 1–2)
+
+### Experiment 2: Pose Inference (`pose_inference`)
+
+The core use case: estimate camera pose by maximizing the marginalized posterior over landmark positions, comparing Laplace vs saddlepoint-corrected objectives. This is the full pipeline connecting all three paper contributions.
+
+**Setup:** A camera observes 12 landmarks at varying depths with uncertain 3D priors. The negative log marginalized posterior is optimized over SE(3) using damped Newton with compositive updates f ← f·exp(δξ).
+
+**Part 1 — 1D sweep:** Evaluates both objectives at 21 points along the depth (t_z) direction, revealing where each peaks. The saddlepoint minimum shifts relative to Laplace because close landmarks have depth-dependent non-Gaussian corrections.
+
+**Part 2 — Full 6D optimization:** Runs Newton from a perturbed initial guess, once for Laplace and once for saddlepoint. Both converge, but to slightly different poses.
+
+**Part 3 — Comparison:** Prints converged poses alongside ground truth, pose error metrics, and per-landmark SP correction magnitudes.
+
+**Part 4 — Per-landmark detail:** Shows c₁ vs depth at the Laplace optimum, confirming that closer landmarks drive the correction.
+
+```bash
+cargo run --release --example pose_inference           # moderate range (depth≈8, σ_prior=2)
+cargo run --release --example pose_inference close     # close range (depth≈4, σ_prior=3)
+```
+
+The `close` regime is where the Laplace–saddlepoint divergence is largest — the projective non-Gaussianity is strongest when σ_depth/depth is non-negligible.
+
+### Experiment 3: Multi-Camera Saddlepoint (`multicam_saddlepoint`)
+
+Saddlepoint-corrected landmark marginalization with 2–12 cameras observing a shared 3D point cloud in a ring configuration. Demonstrates how the correction magnitude decreases as more cameras constrain each landmark.
+
+**Setup:** Cameras arranged in a ring at radius 8m, all looking at the origin. 20 landmarks in [−2, 2]³. Each landmark is optimized and marginalized using the multi-camera API.
+
+```bash
+cargo run --release --example multicam_saddlepoint             # default: 4 cameras, 20 landmarks
+cargo run --release --example multicam_saddlepoint 2 30        # stereo, 30 landmarks
+cargo run --release --example multicam_saddlepoint 12 20       # 12 cameras, 20 landmarks
+```
+
+**Output:**
+- Per-landmark table: views, depth, c₁, A/12, B/8, −Q₄/8
+- Camera-count sweep (2–12 cameras) for a test point at the origin
+- CSV: `multicam_saddlepoint.csv`
+
+**Key finding:** The stereo case (2 cameras) produces corrections ~200× larger than 4-camera, confirming the correction matters most in the typical multi-view operating regime.
+
+### Experiment 4: Extended Multi-Camera Analysis (`multicam_experiment`)
+
+More detailed multi-camera experiment with Monte Carlo integration as ground truth for the marginal integral. Validates the saddlepoint correction against numerical integration.
+
+**Setup:** Similar to Experiment 3 but adds importance-sampling MC integration (200k samples) for 1–2 camera configurations, plus a depth-dependence sweep.
+
+```bash
+cargo run --release --example multicam_experiment
+```
+
+**Output:**
+- Part 1: c₁ vs number of cameras (averaged over point cloud)
+- Part 2: Laplace vs saddlepoint vs MC comparison (1 and 2 cameras)
+- Part 3: c₁ vs depth at fixed 2-camera baseline
+- CSV: `multicam_saddlepoint.csv`
+
 ### Pending Work
 
 | Item | Priority | Description |
 |------|----------|-------------|
-| `propagation.rs` | ✅ Done | First/second-order covariance propagation with MC validation (88 tests total) |
-| Multi-camera saddlepoint | ✅ Done | `multicam_saddlepoint.rs`: 2–12 cameras, point cloud, camera-count sweep |
 | Experiment figures | High | Generate paper figures from Rust (bias scatter, propagation accuracy, convergence) |
 | Closed-form Q₄ | Low | Replace FD-based quartic contraction with analytic fourth derivatives of projective model |
-| t-form J_t option | Low | Add alternative `j_coupling_tform` using the S−S⁻¹(−Ω) structure (proven equivalent) |
 
 ### Resolved Items
 
 | Item | Resolution |
 |------|------------|
+| Pose inference example | ✅ `pose_inference.rs`: full 6D Newton with SP-corrected marginal, 1D sweep + comparison |
 | Closed-form J_t | ✅ Derived T-form with α = (sinΘ−Θ)/(2(1−cosΘ)), verified to 7.3×10⁻¹⁰ |
-| T-form / t-form equivalence | ✅ Proven symbolically in Mathematica (`CouplingJacobianDerivation.m`, Step 5) |
+| T-form symbolic proof | ✅ Proven in Mathematica: 9/9 Ω substitutions with symbolic T (`CouplingJacobianDerivation.m`) |
+| Erratum eq 78 | ✅ Second equality was wrong: RHS is β, not α. Corrected in paper |
 | Saddlepoint correction formula | ✅ Corrected to c₁ = (1/12)A + (1/8)B − (1/8)Q₄, verified against quadrature |
 | Third derivative sign | ✅ Fixed: ∂³u/∂x₃'³ = −6u/x₃'³ |
 | SE(3) Jacobian FD test | ✅ Was `#[ignore]`, now passing (bug was in original j_coupling, not the formula) |
@@ -174,13 +251,11 @@ All 6×6 matrices are related by the block permutation P = [[0, I₃]; [I₃, 0]
 
 2. **det S = 2(1 − cos Θ)/Θ²** — Exact volume element for Lie-Cartan coordinate chart. Needed for density transformations between [Ω, t] and [Ω, T] coordinates. Continuous at Θ = 0 (det S → 1), vanishes at Θ = π.
 
-3. **Compact T-form coupling Jacobian** — Single-line formula for ∂[S⁻¹T]/∂Ω using scalar coefficients x, α and outer products, replacing Barfoot's four-line iterated cross-product expansion. Proven algebraically equivalent in Mathematica (CouplingJacobianDerivation.m, Step 5).
+3. **Compact T-form coupling Jacobian** — Single-line formula for ∂[S⁻¹T]/∂Ω with projector decomposition into axial and transverse components, replacing Barfoot's four-line iterated cross-product expansion. Proven algebraically equivalent in Mathematica (CouplingJacobianDerivation.m, 9/9 Ω substitutions).
 
-## Multi-Camera Saddlepoint Experiment
+## Multi-Camera Saddlepoint Results
 
-The `multicam_saddlepoint` example demonstrates saddlepoint-corrected landmark marginalization with 2–12 cameras observing a shared 3D point cloud in a ring configuration.
-
-### Results: Camera-count sweep (test point at origin)
+### Camera-count sweep (test point at origin)
 
 | N_cam | views | σ_depth | σ/depth | c₁ |
 |------:|------:|--------:|--------:|---:|
@@ -191,28 +266,12 @@ The `multicam_saddlepoint` example demonstrates saddlepoint-corrected landmark m
 | 8 | 8 | 0.020 | 0.0026 | −1.8×10⁻⁵ |
 | 12 | 12 | 0.016 | 0.0022 | −1.2×10⁻⁵ |
 
-**Key finding:** The stereo case (2 cameras) produces the largest saddlepoint correction (~200× larger than 4-camera), confirming that the correction matters most in the typical multi-view operating regime where depth is constrained by triangulation parallax.
-
 ### Stereo full point cloud (2 cameras, 30 landmarks)
 
 - 100% saddlepoint validity across all landmarks
 - Individual corrections up to c₁ ≈ 9×10⁻³
 - Cumulative correction: Σ|Δ| = 4.4×10⁻²
 - Correction dominated by negative Q₄ term (depth non-Gaussianity)
-
-### Usage
-
-```bash
-cargo run --release --example bias_experiment          # paper config: N=3, σ=1.0
-cargo run --release --example bias_experiment mild     # mild config: N=8, σ=0.5
-
-cargo run --release --example multicam_saddlepoint [N_cameras] [N_landmarks]
-cargo run --release --example multicam_saddlepoint 4 20   # default
-cargo run --release --example multicam_saddlepoint 2 30   # stereo
-
-cargo run --release --example pose_inference        # moderate range (depth≈8)
-cargo run --release --example pose_inference close   # close range (depth≈4), larger SP effect
-```
 
 ## Mathematica Verification Scripts
 
@@ -245,16 +304,21 @@ cargo run --release --example pose_inference close   # close range (depth≈4), 
 | 9 | Symbolic P×Hess decomposition of f''' | Exact match |
 | 10 | Depth scaling analysis | (σ_z/depth)² confirmed |
 
-### CouplingJacobianDerivation.m — d[S⁻¹T]/dΩ from first principles
+### CouplingJacobianDerivation.m — d[S⁻¹T]/dΩ symbolic proof
 
 | Step | What | Result |
 |------|------|--------|
-| 1–2 | Symbolic S⁻¹, chain rule d/dΩ through (θ, r) | Exact 3×3 expression |
-| 3 | Symbolic derivative vs FD | 1.74×10⁻⁸ |
-| 4 | Three candidate formulas vs FD | (numerical evaluation has scoping issue) |
-| 5 | **T-form vs exact symbolic derivative** | Verified (see symbolic output) |
-| 5 | **T-form(T=St) − t-form = 0** | **ZERO (proven)** — algebraic equivalence |
-| 6 | Diagnosis of original Rust bug | Formula correct; implementation error |
+| Setup | Build S⁻¹ directly from Ω = (w₁,w₂,w₃), Θ = √(w·w) implicit | No (θ,r) split |
+| Step 1 | Exact derivative via Mathematica D[] through Sqrt[] | 3×3 symbolic |
+| Step 2 | T-form as 4 separate terms (cannot add symbolically) | Unsimplified |
+| Step 3 | Substitute 9 Ω vectors, simplify each term, add, compare | **9/9 ZERO** |
+| Coeffs | α half-angle form, β identity, α ≠ β, erratum disproof | All PROVEN |
+
+**Mathematica pitfalls documented in script header:**
+1. Must parametrize in Ω directly (not θ, r with |r|=1)
+2. Must NOT Simplify expressions with symbolic Sqrt[w₁²+w₂²+w₃²]
+3. Must NOT add T-form terms symbolically (auto-simplification drops terms)
+4. FullSimplify fails on trig(n) vs trig(n/2) — use numerical fallback
 
 ## Publication Target
 
@@ -283,5 +347,5 @@ Code: MIT License (see `rust/LICENSE` when available).
 ## Contacts
 
 Frank O. Kuehnel — Excel Solutions LLC
-Andre Jalobenau - Bayesmap Inc.
+Andre Jalobeanu — Bayesmap Inc.
 Email: kuehnelf@gmail.com
