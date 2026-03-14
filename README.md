@@ -1,5 +1,7 @@
 # Higher-Order Uncertainty Propagation and Saddlepoint Marginalization on SE(3)
 
+[![Rust Tests](https://github.com/fkuehnel/bayesian-slam/actions/workflows/rust-tests.yml/badge.svg)](https://github.com/fkuehnel/bayesian-slam/actions/workflows/rust-tests.yml)
+
 **Authors:** Frank O. Kuehnel, Andre Jalobeanu
 
 ---
