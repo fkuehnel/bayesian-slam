@@ -6,12 +6,15 @@ Reads the CSV produced by `cargo run --release --example bias_experiment`
 and generates scatter plots comparing first-kind (exponential) and
 second-kind (additive) coordinate errors.
 
+Outputs PGF files for direct inclusion in LaTeX documents (text is
+rendered by LaTeX using your document fonts) as well as PNG previews.
+
 Usage:
     python experiments/plot_bias_experiment.py [path/to/bias_experiment.csv]
 
 Default CSV path: /mnt/user-data/outputs/bias_experiment.csv
-Output: saves figures next to the CSV as bias_scatter_translation.png
-        and bias_scatter_rotation.png
+Output: saves figures next to the CSV as bias_scatter_translation.{pgf,png}
+        and bias_scatter_rotation.{pgf,png}
 """
 
 import sys
@@ -19,8 +22,20 @@ import os
 import numpy as np
 
 import matplotlib
-matplotlib.use("Agg")
+matplotlib.use("pgf")
 import matplotlib.pyplot as plt
+
+matplotlib.rcParams.update({
+    "pgf.texsystem": "pdflatex",
+    "font.family": "serif",
+    "text.usetex": True,
+    "pgf.rcfonts": False,
+    "axes.labelsize": 10,
+    "font.size": 10,
+    "legend.fontsize": 8,
+    "xtick.labelsize": 8,
+    "ytick.labelsize": 8,
+})
 
 
 def load_csv(path):
@@ -59,8 +74,8 @@ def scatter_pair(ax_l1, ax_l2, l1, l2, comp_x, comp_y, labels, title_prefix):
 
     l1_bias = np.linalg.norm(l1_mean)
     l2_bias = np.linalg.norm(l2_mean)
-    ax_l1.set_title(f"{title_prefix} — L1 (exp)\n|bias| = {l1_bias:.4f}")
-    ax_l2.set_title(f"{title_prefix} — L2 (additive)\n|bias| = {l2_bias:.4f}")
+    ax_l1.set_title(rf"{title_prefix} --- L1 (exp)" "\n" rf"$\|\mathrm{{bias}}\| = {l1_bias:.4f}$")
+    ax_l2.set_title(rf"{title_prefix} --- L2 (additive)" "\n" rf"$\|\mathrm{{bias}}\| = {l2_bias:.4f}$")
 
     # Use same axis limits for fair comparison
     all_vals = np.concatenate([l1[:, [comp_x, comp_y]], l2[:, [comp_x, comp_y]]])
@@ -100,14 +115,15 @@ def main():
                      trans_labels, "Translation")
 
     fig.suptitle(
-        f"Experiment 1: Translation Error Scatter  (n={n})\n"
-        "L1 = first-kind (exponential)  |  L2 = second-kind (additive)",
+        rf"Experiment 1: Translation Error Scatter \quad ($n={n}$)" "\n"
+        r"L1 = first-kind (exponential) $\mid$ L2 = second-kind (additive)",
         fontsize=13, fontweight="bold",
     )
     fig.tight_layout(rect=[0, 0, 1, 0.92])
-    path1 = os.path.join(out_dir, "bias_scatter_translation.png")
-    fig.savefig(path1, dpi=150)
-    print(f"Saved {path1}")
+    for ext in ("pgf", "png"):
+        path1 = os.path.join(out_dir, f"bias_scatter_translation.{ext}")
+        fig.savefig(path1, dpi=150)
+        print(f"Saved {path1}")
     plt.close(fig)
 
     # ── Figure 2: Rotation scatter ──
@@ -119,14 +135,15 @@ def main():
                      rot_labels, "Rotation")
 
     fig.suptitle(
-        f"Experiment 1: Rotation Error Scatter  (n={n})\n"
-        "L1 = first-kind (exponential)  |  L2 = second-kind (additive)",
+        rf"Experiment 1: Rotation Error Scatter \quad ($n={n}$)" "\n"
+        r"L1 = first-kind (exponential) $\mid$ L2 = second-kind (additive)",
         fontsize=13, fontweight="bold",
     )
     fig.tight_layout(rect=[0, 0, 1, 0.92])
-    path2 = os.path.join(out_dir, "bias_scatter_rotation.png")
-    fig.savefig(path2, dpi=150)
-    print(f"Saved {path2}")
+    for ext in ("pgf", "png"):
+        path2 = os.path.join(out_dir, f"bias_scatter_rotation.{ext}")
+        fig.savefig(path2, dpi=150)
+        print(f"Saved {path2}")
     plt.close(fig)
 
     # ── Print summary statistics ──
