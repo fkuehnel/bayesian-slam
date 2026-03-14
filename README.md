@@ -10,7 +10,7 @@ This repository accompanies the paper *Higher-Order Uncertainty Propagation and 
 
 **Paper:** [SE3_inference_paper.pdf](paper/SE3_inference_paper.pdf)
 
-The core ideas originate from work at NASA Ames Research Center (2008) on robust pose estimation using the SE(3) Lie group structure. This project refocuses that foundational material into three standalone contributions aimed at the broader estimation and inference community. All formulas have been verified symbolically (Mathematica) and numerically (Rust finite differences, Python, Monte Carlo).
+The core ideas originate from work at NASA Ames Research Center (2006) on robust pose estimation using the SE(3) Lie group structure. This project refocuses that foundational material into three standalone contributions aimed at the broader estimation and inference community. All formulas have been verified symbolically (Mathematica) and numerically (Rust finite differences, Python, Monte Carlo).
 
 ## What This Paper Contributes
 
