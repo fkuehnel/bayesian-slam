@@ -78,7 +78,7 @@ RobustPoseEst/
 │       ├── pose_inference.rs          # Experiment 2: pose estimation with SP-corrected marginal
 │       ├── multicam_saddlepoint.rs    # Experiment 3: multi-camera saddlepoint with camera sweep
 │       └── multicam_experiment.rs     # Experiment 4: extended multi-camera analysis with MC truth
-└── experiments/                       # Plotting scripts for paper figures (see PLOTTING.md)
+└── experiments/                       # ing scripts for paper figures (see ING.md)
     ├── README.md                      # Plotting guide: style, templates, LaTeX integration
     ├── plot_bias_experiment.py        # Experiment 1: L1 vs L2 bias scatter (PGF + PNG)
     └── data/                          # Rust-generated CSVs (created by examples)
@@ -268,13 +268,13 @@ python experiments/plot_bias_experiment.py
 ```
 
 To add a new figure for another experiment, follow the template and
-checklist in [experiments/PLOTTING.md §4](experiments/PLOTTING.md).
+checklist in [experiments/README.md §4](experiments/README.md).
 
 ### Pending Work
 
 | Item | Priority | Description |
 |------|----------|-------------|
-| Remaining plot scripts | High | `experiments/plot_propagation.py`, `experiments/plot_convergence.py`, `experiments/plot_saddlepoint.py`, `experiments/plot_sp_regime.py` (see [experiments/PLOTTING.md §5](experiments/PLOTTING.md)) |
+| Remaining plot scripts | High | `experiments/plot_propagation.py`, `experiments/plot_convergence.py`, `experiments/plot_saddlepoint.py`, `experiments/plot_sp_regime.py` (see [experiments/README.md §5](experiments/README.md)) |
 | Good Notations | High | Good consistent notations that the target audience knows |
 | Experimental findings | High | Our paper must be based on repeatable experiments |
 | More examples | Medium | An example script for pose and 3D landmark inference |
