@@ -87,7 +87,7 @@ RobustPoseEst/
 **Data flow:**
 `rust/examples/*.rs` → `experiments/data/*.csv` → `experiments/plot_*.py` → `paper/figures/*.{pgf,png}` → `\input{figures/…}` in `paper/SE3_inference_paper.tex`
 
-See [experiments/PLOTTING.md](experiments/PLOTTING.md) for the full plotting guide.
+See [experiments/PLOTTING.md](experiments/README.md) for the full plotting guide.
 
 ## Rust Implementation
 
