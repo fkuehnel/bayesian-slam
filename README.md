@@ -12,7 +12,7 @@ This repository accompanies the paper *Higher-Order Uncertainty Propagation and 
 
 **Paper:** [SE3_inference_paper.pdf](paper/SE3_inference_paper.pdf)
 
-The core ideas originate from work at NASA Ames Research Center (2006) on robust pose estimation using the SE(3) Lie group structure. This project refocuses that foundational material into three standalone contributions aimed at the broader estimation and inference community. All formulas have been verified symbolically (Mathematica) and numerically (Rust finite differences, Python, Monte Carlo).
+The core ideas originate from work at NASA Ames Research Center (2006) on [robust pose estimation using the SE(3) Lie group](paper/robustEst.pdf) structure. This project refocuses that foundational material into three standalone contributions aimed at the broader estimation and inference community. All formulas have been verified symbolically (Mathematica) and numerically (Rust finite differences, Python, Monte Carlo).
 
 ## What This Paper Contributes
 
@@ -335,7 +335,7 @@ Robotics or estimation journal (IEEE Transactions on Robotics, IJRR, or similar)
 
 - **Kuehnel (2004)**: *AIP Conf. Proc.* vol. 735, pp. 176–186. [DOI: 10.1063/1.1835212](https://doi.org/10.1063/1.1835212) — First introduction of Lie-Cartan exponential coordinates for unbiased Bayesian pose estimation
 - **Kuehnel (2005)**: *AIP Conf. Proc.* vol. 803, pp. 318–329. [DOI: 10.1063/1.2149810](https://doi.org/10.1063/1.2149810) — Local frame junction trees in SLAM
-- **Kuehnel (2006)**: Tech. Rep., NASA Ames / USRA-RIACS — Full SE(3) algebra toolkit (BCH, Jacobians, phase reflection)
+- **Kuehnel (2006)**: Tech. Rep., NASA Ames / USRA-RIACS — [Full SE(3) algebra toolkit](paper/robustEst.pdf) (BCH, Jacobians, phase reflection)
 - **Solà, Deray & Atchuthan (2018)**: ["A micro Lie theory for state estimation in robotics"](https://arxiv.org/pdf/1812.01537) — First-order SE(3) machinery; our work extends to second order
 - **Ye & Chirikjian (2024)**: ["Uncertainty propagation on unimodular Lie groups"](https://openreview.net/forum?id=duNh060j1J) — Propagation via SDEs; our approach uses closed-form BCH
 - **Barfoot (2024)**: [*State Estimation for Robotics*](https://asrl.utias.utoronto.ca/~tdb/bib/barfoot_ser24.pdf) — Comprehensive textbook; our coupling Jacobian and saddlepoint go beyond what is covered
