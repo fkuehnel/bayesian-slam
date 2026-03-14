@@ -133,6 +133,15 @@ cargo test
 cargo test -- --nocapture  # see diagnostic output
 ```
 
+> **Cache trouble?** Rust's incremental compilation cache can occasionally
+> cause stale builds or cryptic errors after switching branches, updating the
+> toolchain, or interrupted compilations. If a build fails unexpectedly,
+> `cargo clean` is the nuclear option — it wipes the entire `target/`
+> directory and forces a full rebuild from scratch:
+> ```bash
+> cargo clean && cargo build --release
+> ```
+
 ## Examples
 
 ### Experiment 1: Coordinate Bias (`bias_experiment`)
