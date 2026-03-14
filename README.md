@@ -205,8 +205,9 @@ cargo run --release --example multicam_experiment
 | Item | Priority | Description |
 |------|----------|-------------|
 | Experiment figures | High | Generate paper figures from Rust (bias scatter, propagation accuracy, convergence) |
-| Good Notations | High | The reader want good consistent notations that he knows |
+| Good Notations | High | Good consistent notations that the target audience knows |
 | Experimental findings | High | Our paper must be based on repeatable experiments |
+| More examples | Medium | An example script for pose and 3D landmark inference |
 | Verify Solà notation | Medium | Mathematica scripts to confirm notation mappings |
 | Closed-form Q₄ | Low | Replace FD-based quartic contraction with analytic fourth derivatives of projective model |
 
