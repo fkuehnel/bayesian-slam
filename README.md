@@ -12,7 +12,7 @@ This repository accompanies the paper *Higher-Order Uncertainty Propagation and 
 
 **Paper:** [SE3_inference_paper.pdf](paper/SE3_inference_paper.pdf)
 
-The core ideas originate from work at NASA Ames Research Center (2006) on [robust pose estimation using the SE(3) Lie group](paper/robustEst.pdf) structure. This project refocuses that foundational material into three standalone contributions aimed at the broader estimation and inference community. All formulas have been verified symbolically (Mathematica) and numerically (Rust finite differences, Python, Monte Carlo).
+The core ideas originate from work at NASA Ames Research Center (2006) on [robust pose estimation using the SE(3) Lie group](paper/robustEst.pdf) structure. This project refocuses that foundational material into contributions aimed at the broader estimation and inference community. All formulas have been verified symbolically (Mathematica) and numerically (Rust finite differences, Python, Monte Carlo).
 
 ## What This Paper Contributes
 
@@ -20,7 +20,7 @@ The core ideas originate from work at NASA Ames Research Center (2006) on [robus
 
 Current filters and optimizers (EKF, IEKF, factor graphs) propagate pose uncertainty using first-order Jacobians. On SE(3), the semi-direct product coupling between rotation and translation introduces systematic bias that first-order methods miss. We derive:
 
-- Compact composition Jacobians including the a novel closed-form rotation-translation coupling Jacobian **J_t(Ω, t)**
+- Composition Jacobians including the novel compact closed-form rotation-translation coupling Jacobian **J_t(Ω, t)**
 - Second-order corrections to both the mean and covariance of composed poses
 - Explicit formulas using the finite BCH composition via SU(2), avoiding truncated series
 
@@ -41,7 +41,7 @@ When camera observations are projective (x/z, y/z), the joint posterior over pos
 
 The paper provides a self-contained reference for the SE(3) machinery, all symbolically verified. This machinery is equivalent to the standard toolkit in **Solà, et. al**, and extends it: 
 
-- Exponential/logarithmic maps with Lie-Cartan coordinates of the first kind
+- Exponential/logarithmic maps with Lie-Cartan coordinates of the first kind (already known)
 - Closed-form finite Rodrigues vector composition via the SU(2)/Z₂ ≅ SO(3) double cover
 - Phase reflection handling at Θ = π with cutline analysis
 - Wei-Norman formula and both left/right Rodrigues Jacobians
