@@ -209,6 +209,9 @@ cargo run --release --example bias_experiment mild     # mild config: N=8, σ=0.
 cargo run --release --example multicam_saddlepoint [N_cameras] [N_landmarks]
 cargo run --release --example multicam_saddlepoint 4 20   # default
 cargo run --release --example multicam_saddlepoint 2 30   # stereo
+
+cargo run --release --example pose_inference        # moderate range (depth≈8)
+cargo run --release --example pose_inference close   # close range (depth≈4), larger SP effect
 ```
 
 ## Mathematica Verification Scripts
