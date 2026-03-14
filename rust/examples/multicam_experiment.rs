@@ -395,7 +395,7 @@ fn main() {
     }
 
     // Write CSV
-    let csv_path = std::path::Path::new("/mnt/user-data/outputs/multicam_saddlepoint.csv");
+    let csv_path = std::path::Path::new("../experiments/data/multicam_saddlepoint.csv");
     if let Some(parent) = csv_path.parent() {
         std::fs::create_dir_all(parent).unwrap_or_else(|e| {
             panic!(

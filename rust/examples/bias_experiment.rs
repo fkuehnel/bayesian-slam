@@ -327,7 +327,7 @@ fn main() {
     }
 
     // ─── Write CSV for plotting ───
-    let csv_path = std::path::Path::new("/mnt/user-data/outputs/bias_experiment.csv");
+    let csv_path = std::path::Path::new("../experiments/data/bias_experiment.csv");
     if let Some(parent) = csv_path.parent() {
         std::fs::create_dir_all(parent).unwrap_or_else(|e| {
             panic!(
