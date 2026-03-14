@@ -56,6 +56,9 @@ The paper provides a self-contained reference for the SE(3) machinery, all symbo
 ├── paper/
 │   ├── SE3_inference_paper.tex        # Main manuscript (LaTeX, ~2200 lines)
 │   └── robustEst.tex                  # Original 2006 technical report (reference)
+├── experiments/
+│   ├── PLOTTING.md                    # Plotting guide: style, templates, LaTeX integration
+│   └── plot_bias_experiment.py        # Experiment 1: L1 vs L2 bias scatter (PGF + PNG)
 ├── verification/
 │   ├── SE3AlgebraVerification.m       # Mathematica: 24 verified identities (SO3/SE3/BCH/Jacobians)
 │   ├── SaddlepointVerification.m      # Mathematica: projective derivs, saddlepoint formula, quadrature
@@ -76,7 +79,7 @@ The paper provides a self-contained reference for the SE(3) machinery, all symbo
 │       ├── pose_inference.rs          # Experiment 2: pose estimation with SP-corrected marginal
 │       ├── multicam_saddlepoint.rs    # Experiment 3: multi-camera saddlepoint with camera sweep
 │       └── multicam_experiment.rs     # Experiment 4: extended multi-camera analysis with MC truth
-└── experiments/                       # Planned: scripts reproducing paper figures
+└── experiments/                       # Plotting scripts for paper figures (see PLOTTING.md)
 ```
 
 ## Rust Implementation
@@ -144,6 +147,14 @@ cargo run --release --example bias_experiment mild     # mild config: N=8, σ=0.
 - Console: mean and std in L1 (exponential) and L2 (additive) coordinates, bias ratio
 - CSV: `bias_experiment.csv` with per-sample data for scatter plots (paper Figs. 1–2)
 
+**Plotting:** See [experiments/PLOTTING.md](experiments/PLOTTING.md) for the full guide. Quick version:
+
+```bash
+python experiments/plot_bias_experiment.py bias_experiment.csv
+# → bias_scatter_translation.{pgf,png}
+# → bias_scatter_rotation.{pgf,png}
+```
+
 ### Experiment 2: Pose Inference (`pose_inference`)
 
 The core use case: estimate camera pose by maximizing the marginalized posterior over landmark positions, comparing Laplace vs saddlepoint-corrected objectives. This is the full pipeline connecting all three paper contributions.
@@ -200,11 +211,58 @@ cargo run --release --example multicam_experiment
 - Part 3: c₁ vs depth at fixed 2-camera baseline
 - CSV: `multicam_saddlepoint.csv`
 
+## Reproducing Paper Figures
+
+All paper figures use the **Matplotlib → PGF** pipeline: Rust examples
+emit CSV data, Python scripts produce `.pgf` files (LaTeX source for
+TikZ), which are `\input`'d into the manuscript so that figure text is
+rendered with the document's own fonts. PNG previews are saved alongside
+for quick inspection.
+
+The full guide — shared style conventions, color palette, figure sizing
+for IEEE column widths, a copy-paste template for new plot scripts, and
+LaTeX integration instructions — lives in
+**[experiments/PLOTTING.md](experiments/PLOTTING.md)**.
+
+### Quick reference
+
+| Figure | Rust example | Plot script | Output files |
+|--------|-------------|-------------|--------------|
+| Bias scatter (translation) | `bias_experiment` | `plot_bias_experiment.py` | `bias_scatter_translation.{pgf,png}` |
+| Bias scatter (rotation) | `bias_experiment` | `plot_bias_experiment.py` | `bias_scatter_rotation.{pgf,png}` |
+| 2nd-order covariance accuracy | `propagation` (MC) | `plot_propagation.py` | Planned |
+| Convergence: margMAP vs BA | `pose_inference` | `plot_convergence.py` | Planned |
+| Saddlepoint c₁ vs depth | `multicam_saddlepoint` | `plot_saddlepoint.py` | Planned |
+| c₁ vs number of cameras | `multicam_saddlepoint` | `plot_saddlepoint.py` | Planned |
+| SP validity regime sweep | `multicam_experiment` | `plot_sp_regime.py` | Planned |
+
+### End-to-end example
+
+```bash
+# 1. Generate data
+cd rust
+cargo run --release --example bias_experiment
+
+# 2. Plot
+cd ..
+python experiments/plot_bias_experiment.py bias_experiment.csv
+
+# 3. Include in paper (note: \input, not \includegraphics — PGF is LaTeX source)
+#    \begin{figure}[t]
+#        \centering
+#        \input{figures/bias_scatter_translation.pgf}
+#        \caption{…}
+#    \end{figure}
+```
+
+To add a new figure for another experiment, follow the template and
+checklist in [experiments/PLOTTING.md §4](experiments/PLOTTING.md).
+
 ### Pending Work
 
 | Item | Priority | Description |
 |------|----------|-------------|
-| Experiment figures | High | Generate paper figures from Rust (bias scatter, propagation accuracy, convergence) |
+| Remaining plot scripts | High | `plot_propagation.py`, `plot_convergence.py`, `plot_saddlepoint.py`, `plot_sp_regime.py` (see [PLOTTING.md §5](experiments/PLOTTING.md) for the full list) |
 | Good Notations | High | Good consistent notations that the target audience knows |
 | Experimental findings | High | Our paper must be based on repeatable experiments |
 | More examples | Medium | An example script for pose and 3D landmark inference |
@@ -215,6 +273,7 @@ cargo run --release --example multicam_experiment
 
 | Item | Resolution |
 |------|------------|
+| Plotting workflow | ✅ Documented in [experiments/PLOTTING.md](experiments/PLOTTING.md): shared style, PGF pipeline, templates, LaTeX integration |
 | Pose inference example | ✅ `pose_inference.rs`: full 6D Newton with SP-corrected marginal, 1D sweep + comparison |
 | Closed-form J_t | ✅ Derived T-form with α = (sinΘ−Θ)/(2(1−cosΘ)), verified to 7.3×10⁻¹⁰ |
 | T-form symbolic proof | ✅ Proven in Mathematica: 9/9 Ω substitutions with symbolic T (`CouplingJacobianDerivation.m`) |
