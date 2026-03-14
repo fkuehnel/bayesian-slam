@@ -65,10 +65,10 @@ The paper provides a self-contained reference for the SE(3) machinery, all symbo
 │   │   ├── so3.rs                     # SO(3): Rodrigues exp/log, S matrix, S⁻¹
 │   │   ├── se3.rs                     # SE(3): Pose struct, compose/inverse/act/exp/log
 │   │   ├── bch.rs                     # Finite BCH via SU(2) quaternions, phase reflection, Jacobians
-│   │   ├── jacobians.rs              # J_ωr, J_ωl, J_t coupling (analytic T-form), 6×6 SE(3) Jacobian
-│   │   ├── projective.rs             # Pinhole camera, derivatives through 3rd order, third cumulants
-│   │   ├── saddlepoint.rs            # Landmark optimization, saddlepoint correction, validity guard
-│   │   └── propagation.rs            # First/second-order covariance transport, MC validation
+│   │   ├── jacobians.rs               # J_ωr, J_ωl, J_t coupling (analytic T-form), 6×6 SE(3) Jacobian
+│   │   ├── projective.rs              # Pinhole camera, derivatives through 3rd order, third cumulants
+│   │   ├── saddlepoint.rs             # Landmark optimization, saddlepoint correction, validity guard
+│   │   └── propagation.rs             # First/second-order covariance transport, MC validation
 │   └── examples/
 │       ├── bias_experiment.rs         # Experiment 1: L1 vs L2 coordinate bias (21× ratio)
 │       ├── pose_inference.rs          # Experiment 2: pose estimation with SP-corrected marginal
@@ -346,6 +346,6 @@ Code: MIT License (see `rust/LICENSE` when available).
 
 ## Contacts
 
-Frank O. Kuehnel — Excel Solutions LLC
-Andre Jalobeanu — Bayesmap Inc.
+Frank O. Kuehnel – Excel Solutions LLC<br>
+Andre Jalobeanu – Bayesmap Inc.<br>
 Email: kuehnelf@gmail.com
