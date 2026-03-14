@@ -205,6 +205,9 @@ cargo run --release --example multicam_experiment
 | Item | Priority | Description |
 |------|----------|-------------|
 | Experiment figures | High | Generate paper figures from Rust (bias scatter, propagation accuracy, convergence) |
+| Good Notations | High | The reader want good consistent notations that he knows |
+| Experimental findings | High | Our paper must be based on repeatable experiments |
+| Verify Solà notation | Medium | Mathematica scripts to confirm notation mappings |
 | Closed-form Q₄ | Low | Replace FD-based quartic contraction with analytic fourth derivatives of projective model |
 
 ### Resolved Items
@@ -216,9 +219,7 @@ cargo run --release --example multicam_experiment
 | T-form symbolic proof | ✅ Proven in Mathematica: 9/9 Ω substitutions with symbolic T (`CouplingJacobianDerivation.m`) |
 | Erratum eq 78 | ✅ Second equality was wrong: RHS is β, not α. Corrected in paper |
 | Saddlepoint correction formula | ✅ Corrected to c₁ = (1/12)A + (1/8)B − (1/8)Q₄, verified against quadrature |
-| Third derivative sign | ✅ Fixed: ∂³u/∂x₃'³ = −6u/x₃'³ |
 | SE(3) Jacobian FD test | ✅ Was `#[ignore]`, now passing (bug was in original j_coupling, not the formula) |
-| det S formula | ✅ Added det S = 2(1−cosΘ)/Θ² to paper Appendix A |
 
 ## Notation Correspondence with Solà et al. / Barfoot
 
