@@ -298,6 +298,103 @@ pub fn third_cumulants(
     kappa
 }
 
+/// Analytical quartic contraction Q₄ = Σ_{abcd} f''''_{abcd} H⁻¹_{ab} H⁻¹_{cd}.
+///
+/// Replaces the finite-difference computation in saddlepoint.rs.
+/// At the mode (residual ≈ 0), the 4th derivative of the NLL is:
+///
+///   f''''_{abcd} = Σ_{mn} Σ⁻¹_{mn} × [
+///     P_{ma}·D3ⁿ_{bcd} + P_{mb}·D3ⁿ_{acd} + P_{mc}·D3ⁿ_{abd} + P_{md}·D3ⁿ_{abc}
+///     + H^m_{ab}·Hⁿ_{cd} + H^m_{ac}·Hⁿ_{bd} + H^m_{ad}·Hⁿ_{bc}
+///   ]
+///
+/// The D4·e term vanishes at the mode (same reason D3·e vanishes for third cumulants).
+/// The prior σ_xx⁻¹ contributes zero (quadratic → zero 4th derivative).
+pub fn quartic_contraction_analytical(
+    rot: &Mat3,
+    xp: &Vec3,
+    sigma_zz_inv: &[[f64; 2]; 2],
+    h_inv: &Mat3, // world-frame inverse Hessian
+) -> f64 {
+    // Transform H⁻¹ to camera frame: S = R · H⁻¹ · Rᵀ
+    let s = mm3(&mm3(rot, h_inv), &transpose3(rot));
+
+    let p = project_jacobian(xp);
+    let (h_u, h_v) = project_hessian(xp);
+    let (d3u, d3v) = project_third_deriv(xp);
+
+    let mut q4 = 0.0;
+    for a in 0..3 { for b in 0..3 { for c in 0..3 { for d in 0..3 {
+        let mut f4 = 0.0;
+        for m in 0..2 { for n in 0..2 {
+            // Third derivatives of π_n
+            let d3n = if n == 0 { &d3u } else { &d3v };
+            // Hessians of π_m and π_n
+            let hm = if m == 0 { &h_u } else { &h_v };
+            let hn = if n == 0 { &h_u } else { &h_v };
+
+            // 4 Jacobian × 3rd-derivative terms
+            let pd3 = p[m][a] * d3n[b][c][d]
+                     + p[m][b] * d3n[a][c][d]
+                     + p[m][c] * d3n[a][b][d]
+                     + p[m][d] * d3n[a][b][c];
+
+            // 3 Hessian × Hessian terms (3 pairings of {a,b,c,d} into two pairs)
+            let hh = hm[a][b] * hn[c][d]
+                   + hm[a][c] * hn[b][d]
+                   + hm[a][d] * hn[b][c];
+
+            f4 += sigma_zz_inv[m][n] * (pd3 + hh);
+        }}
+        q4 += f4 * s[a][b] * s[c][d];
+    }}}}
+    q4
+}
+
+/// Full fourth cumulant tensor in world coordinates (test-only).
+///
+/// Returns f''''_{abcd} as a 3×3×3×3 tensor, rotated to world frame.
+#[cfg(test)]
+pub fn fourth_cumulants(
+    rot: &Mat3,
+    xp: &Vec3,
+    sigma_zz_inv: &[[f64; 2]; 2],
+) -> [[[[f64; 3]; 3]; 3]; 3] {
+    let p = project_jacobian(xp);
+    let (h_u, h_v) = project_hessian(xp);
+    let (d3u, d3v) = project_third_deriv(xp);
+
+    // Build in camera coordinates
+    let mut f4_cam = [[[[0.0f64; 3]; 3]; 3]; 3];
+    for a in 0..3 { for b in 0..3 { for c in 0..3 { for d in 0..3 {
+        let mut val = 0.0;
+        for m in 0..2 { for n in 0..2 {
+            let d3n = if n == 0 { &d3u } else { &d3v };
+            let hm = if m == 0 { &h_u } else { &h_v };
+            let hn = if n == 0 { &h_u } else { &h_v };
+
+            val += sigma_zz_inv[m][n] * (
+                p[m][a] * d3n[b][c][d] + p[m][b] * d3n[a][c][d]
+                + p[m][c] * d3n[a][b][d] + p[m][d] * d3n[a][b][c]
+                + hm[a][b] * hn[c][d] + hm[a][c] * hn[b][d] + hm[a][d] * hn[b][c]
+            );
+        }}
+        f4_cam[a][b][c][d] = val;
+    }}}}
+
+    // Rotate to world coordinates
+    let mut f4 = [[[[0.0f64; 3]; 3]; 3]; 3];
+    for a in 0..3 { for b in 0..3 { for c in 0..3 { for d in 0..3 {
+        let mut val = 0.0;
+        for ap in 0..3 { for bp in 0..3 { for cp in 0..3 { for dp in 0..3 {
+            val += rot[ap][a] * rot[bp][b] * rot[cp][c] * rot[dp][d]
+                * f4_cam[ap][bp][cp][dp];
+        }}}}
+        f4[a][b][c][d] = val;
+    }}}}
+    f4
+}
+
 // =========================================================================
 // Calibration
 // =========================================================================
@@ -502,5 +599,77 @@ mod tests {
         }}}
         assert!(max_val > 1e-5,
             "Third cumulants should be nonzero: max={:.2e}", max_val);
+    }
+
+    #[test]
+    fn fourth_cumulants_vs_fd() {
+        // Verify analytical fourth cumulants against FD of the scalar NLL.
+        // We FD the scalar NLL(x_world) = ½ eᵀ Σ⁻¹ e where e = π(xp) - z, z = π(xp₀).
+        // This gives the exact 4th derivative (unlike FD of third_cumulants, which
+        // misses the P_{md}·D3^(n)_{abc} term from the residual differentiation).
+        let rot = so3::exp(&[0.2, -0.1, 0.15]);
+        let xp = [1.2, -0.7, 6.0];
+        let sig_inv = isotropic_sigma_inv(0.01);
+        let z = project(&xp); // observation at reference point
+
+        let f4 = fourth_cumulants(&rot, &xp, &sig_inv);
+
+        // Scalar NLL as function of world-frame displacement dx
+        let nll_at = |dx: &[f64; 3]| -> f64 {
+            let mut xp_eval = xp;
+            for i in 0..3 { for j in 0..3 {
+                xp_eval[i] += rot[i][j] * dx[j];
+            }}
+            let pi = project(&xp_eval);
+            let e = [pi[0] - z[0], pi[1] - z[1]];
+            0.5 * (sig_inv[0][0]*e[0]*e[0] + 2.0*sig_inv[0][1]*e[0]*e[1]
+                 + sig_inv[1][0]*e[1]*e[0] + sig_inv[1][1]*e[1]*e[1])
+        };
+
+        // 4th mixed partial via nested central differences:
+        // d⁴f/(da db dc dd) = (1/(2h)⁴) Σ_{sa,sb,sc,sd ∈ {±1}} sa·sb·sc·sd · f(h·(sa·ea+sb·eb+sc·ec+sd·ed))
+        let h = 0.005;
+        let signs: [f64; 2] = [-1.0, 1.0];
+        let mut max_err = 0.0f64;
+
+        for a in 0..3 { for b in 0..3 { for c in 0..3 { for d in 0..3 {
+            let mut fd_val = 0.0;
+            for &sa in &signs { for &sb in &signs { for &sc in &signs { for &sd in &signs {
+                let mut dx = [0.0; 3];
+                for k in 0..3 {
+                    let mut v = 0.0;
+                    if a == k { v += sa; }
+                    if b == k { v += sb; }
+                    if c == k { v += sc; }
+                    if d == k { v += sd; }
+                    dx[k] = h * v;
+                }
+                fd_val += sa * sb * sc * sd * nll_at(&dx);
+            }}}}
+            fd_val /= (2.0 * h).powi(4);
+
+            let err = (f4[a][b][c][d] - fd_val).abs();
+            let scale = f4[a][b][c][d].abs().max(fd_val.abs());
+            if scale > 1e-6 {
+                max_err = max_err.max(err / scale);
+            }
+        }}}}
+        eprintln!("fourth_cumulants_vs_fd: max relative error = {:.2e}", max_err);
+        assert!(max_err < 1e-3, "Fourth cumulants don't match FD: max_rel_err={:.2e}", max_err);
+    }
+
+    #[test]
+    fn quartic_contraction_analytical_nonzero() {
+        let rot = I3;
+        let xp = [0.5, -0.3, 10.0];
+        let sig_inv = isotropic_sigma_inv(0.01);
+        // Build a reasonable H⁻¹ (use measurement info as proxy)
+        let h_inv = inv3(&add_mat3(
+            &measurement_info_matrix(&rot, &xp, &sig_inv),
+            &scale_mat3(1.0, &I3), // add prior
+        ));
+        let q4 = quartic_contraction_analytical(&rot, &xp, &sig_inv, &h_inv);
+        assert!(q4.is_finite() && q4.abs() > 1e-10,
+            "Analytical Q₄ should be nonzero: {:.2e}", q4);
     }
 }

@@ -257,7 +257,7 @@ fn main() {
 
             let sigma_xx_inv = iso3(sigma_prior);
             let opt = optimize_landmark_multicam(&cam_obs, pt, &sigma_xx_inv, 20);
-            let (log_sp, sp_r) = landmark_marginal_multicam(&opt, &cam_obs, &sigma_xx_inv);
+            let (log_sp, sp_r) = landmark_marginal_multicam(&opt, &cam_obs);
 
             // Laplace
             let log_lap = -opt.nll_opt - 0.5 * opt.log_det_h
@@ -325,7 +325,7 @@ fn main() {
 
             let sigma_xx_inv = iso3(sigma_prior);
             let opt = optimize_landmark_multicam(&cam_obs, pt, &sigma_xx_inv, 20);
-            let (log_sp, sp_r) = landmark_marginal_multicam(&opt, &cam_obs, &sigma_xx_inv);
+            let (log_sp, sp_r) = landmark_marginal_multicam(&opt, &cam_obs);
             let log_lap = -opt.nll_opt - 0.5 * opt.log_det_h
                 + 1.5 * (2.0 * std::f64::consts::PI).ln();
             let log_mc = mc_marginal_integral(&cam_obs, &opt.x_opt, &sigma_xx_inv, pt, mc_samples, &mut rng);
@@ -382,7 +382,7 @@ fn main() {
 
         let sigma_xx_inv = iso3(sigma_prior);
         let opt = optimize_landmark_multicam(&cam_obs, &pt, &sigma_xx_inv, 20);
-        let (log_sp, sp_r) = landmark_marginal_multicam(&opt, &cam_obs, &sigma_xx_inv);
+        let (log_sp, sp_r) = landmark_marginal_multicam(&opt, &cam_obs);
         let log_lap = -opt.nll_opt - 0.5 * opt.log_det_h
             + 1.5 * (2.0 * std::f64::consts::PI).ln();
         let log_mc = mc_marginal_integral(&cam_obs, &opt.x_opt, &sigma_xx_inv, &pt, mc_samples, &mut rng);
