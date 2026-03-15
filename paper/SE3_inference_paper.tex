@@ -980,7 +980,105 @@ In practice, this corresponds to landmarks observed from
 at least two cameras with a reasonable baseline, or a single
 camera with an informative depth prior---precisely the
 operating regime of most visual SLAM and bundle adjustment systems.
- 
+
+\subsubsection{Closed-form quartic contraction}
+
+The quartic term $Q_4$ in~\eqref{eq:saddlebody} requires
+the fourth derivative of the negative log-likelihood.
+At the mode $\mathbf{x}_{\rm opt}$, where the residual
+$\mathbf{e} = \pi(\mathbf{x}') - \mathbf{z} \approx 0$,
+the fourth derivative takes a closed form that uses only
+existing projective derivatives:
+\beq
+    f''''_{abcd} = \sum_{mn} \Sigma^{-1}_{zz,mn} \bigl[
+    4\,\text{P\!$\times$\!D3 terms} + 3\,\text{H\!$\times$\!H terms}
+    \bigr],
+    \label{eq:f4closedform}
+\eeq
+where the four $\mathsf{P} \times D^3$ terms are
+$\mathsf{P}_{ma}\,D^{3n}_{bcd} + \mathsf{P}_{mb}\,D^{3n}_{acd}
++ \mathsf{P}_{mc}\,D^{3n}_{abd} + \mathsf{P}_{md}\,D^{3n}_{abc}$
+and the three $\mathsf{H} \times \mathsf{H}$ terms are
+$\mathsf{H}^m_{ab}\,\mathsf{H}^n_{cd}
++ \mathsf{H}^m_{ac}\,\mathsf{H}^n_{bd}
++ \mathsf{H}^m_{ad}\,\mathsf{H}^n_{bc}$,
+with $\mathsf{P}$ = project Jacobian,
+$\mathsf{H}^m$ = project Hessian of component~$m$,
+and $D^{3n}$ = third derivative of component~$n$.
+No fourth derivative of $\pi$ is needed:
+the $D^4 \cdot \mathbf{e}$ term vanishes at the mode
+(by the same argument that eliminates the $D^3 \cdot \mathbf{e}$
+term from the third cumulants).
+The prior $\sfSigma{xx}^{-1}$ contributes zero
+(quadratic $\Rightarrow$ vanishing fourth derivative).
+
+This closed form replaces the finite-difference (FD)
+computation used in earlier implementations and has a
+significant impact on the outer pose optimization.
+When $Q_4$ is computed by FD (inner step $h_{\rm in} = 10^{-5}$),
+the outer Newton optimizer must use a larger step
+($h_{\rm out} = 10^{-3}$) to avoid nested FD interference,
+producing noisy gradients that prevent quadratic convergence.
+With the analytical $Q_4$, the outer optimizer uses the same
+small step sizes as the Laplace case:
+\begin{center}
+\begin{tabular}{l|c|c}
+Method & Iterations & Final $|\nabla|$ \\
+\hline
+Laplace & 5 & $10^{-10}$ \\
+Saddlepoint (FD $Q_4$) & $60+$ & $\sim\!2.5$ \\
+Saddlepoint (analytical $Q_4$) & 5 & $5 \times 10^{-10}$
+\end{tabular}
+\end{center}
+
+\subsubsection{The depth soft mode}
+
+With the convergence issue resolved, the saddlepoint-corrected
+pose estimate can be meaningfully compared to Laplace.
+We test with 12 landmarks at depth $\sim\!13$--$15$\,m,
+prior uncertainty $\sigma_{\rm prior} = 2$\,m,
+and a single camera.
+Both optimizers converge to $|\nabla| < 10^{-9}$ in 5 iterations,
+yielding:
+\begin{center}
+\begin{tabular}{l|c|c}
+ & Laplace & Saddlepoint \\
+\hline
+Rotation error & 0.0259\,rad & 0.0258\,rad \\
+Translation error & 6.45\,m & 6.37\,m \\
+Pose difference & \multicolumn{2}{c}{$\Delta_{\rm rot} = 0.00015$\,rad,
+$\Delta_{\rm trans} = 0.085$\,m}
+\end{tabular}
+\end{center}
+The saddlepoint correction shifts the translation estimate by
+only ${\sim}\,8.5$\,cm on a ${\sim}\,6.4$\,m error.
+Per-landmark corrections are $c_1 \approx 2 \times 10^{-2}$
+(consistent with $(\sigma_{\rm depth}/x_3')^2$ scaling
+at depth $\sim\!14$\,m), but they cannot resolve
+the \emph{depth soft mode}: the projection
+$\pi(\mathbf{x}') = [x_1'/x_3',\, x_2'/x_3']$ is
+nearly invariant under joint camera--landmark depth rescaling,
+making the posterior extremely flat along the
+depth (forward) translation direction.
+
+This is an information-theoretic limitation,
+not an approximation artifact.
+The saddlepoint correctly refines the \emph{shape}
+of each landmark marginal (skewness, kurtosis),
+but no per-landmark correction can create depth information
+absent from the observations.
+Resolving the depth soft mode requires additional constraints:
+(i)~multi-camera or stereo baselines, where parallax
+provides direct depth triangulation;
+(ii)~strong translation priors constraining the forward direction;
+or (iii)~known-scale constraints such as inter-landmark
+distances or IMU-derived scale.
+Multi-camera experiments (not shown)
+confirm that with $4+$ cameras, depth is well-constrained
+and both methods give accurate results, with the
+saddlepoint correction properly accounting for residual
+non-Gaussianity.
+
 \subsection{Experiment 5: Pose Estimate Distribution Quality}
  
 To assess the statistical quality of pose estimates, we impose 
