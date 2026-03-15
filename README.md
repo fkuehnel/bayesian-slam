@@ -337,7 +337,7 @@ All 6×6 matrices are related by the block permutation P = [[0, I₃]; [I₃, 0]
 
 1. **S⁻¹ = J_ωl = J_ωr(−Ω)** — Halves cost: evaluate J_ωl instead of inverting S numerically. Also implies S⁻¹R = RS⁻¹ = J_ωr.
 
-2. **det S = 2(1 − cos Θ)/Θ²** — Exact volume element for Lie-Cartan coordinate chart. Needed for density transformations between [Ω, t] and [Ω, T] coordinates. Continuous at Θ = 0 (det S → 1), vanishes at Θ = π.
+2. **det S = 2(1 − cos Θ)/Θ²** — Exact volume element for Lie-Cartan coordinate chart. Needed for density transformations between [Ω, t] and [Ω, T] coordinates. Continuous at Θ = 0 (det S → 1), vanishes at Θ = 2π.
 
 3. **Compact T-form coupling Jacobian** — Single-line formula for ∂[S⁻¹T]/∂Ω with projector decomposition into axial and transverse components, replacing Barfoot's four-line iterated cross-product expansion. Proven algebraically equivalent in Mathematica (verification/CouplingJacobianDerivation.m, 9/9 Ω substitutions).
 
