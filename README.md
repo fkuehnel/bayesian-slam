@@ -84,8 +84,8 @@ RobustPoseEst/
 │       ├── pose_inference.rs          # Experiment 2: pose estimation with SP-corrected marginal
 │       ├── multicam_saddlepoint.rs    # Experiment 3: multi-camera saddlepoint with camera sweep
 │       └── multicam_experiment.rs     # Experiment 4: extended multi-camera analysis with MC truth
-└── experiments/                       # ing scripts for paper figures (see ING.md)
-    ├── README.md                      # Plotting guide: style, templates, LaTeX integration
+└── experiments/                       # Experiments, plotting, and figure reproduction
+    ├── README.md                      # Full experiment docs, results, plotting guide
     ├── plot_bias_experiment.py        # Experiment 1: L1 vs L2 bias scatter (PGF + PNG)
     └── data/                          # Rust-generated CSVs (created by examples)
 ```
@@ -134,166 +134,42 @@ See [experiments/README.md](experiments/README.md) for the full plotting guide.
 ```bash
 git clone https://github.com/fkuehnel/bayesian-slam.git
 cd bayesian-slam/rust
-
 cargo build --release
 cargo test
-cargo test -- --nocapture  # see diagnostic output
 ```
 
-> **Cache trouble?** Rust's incremental compilation cache can occasionally
-> cause stale builds or cryptic errors after switching branches, updating the
-> toolchain, or interrupted compilations. If a build fails unexpectedly,
-> `cargo clean` is the nuclear option — it wipes the entire `target/`
-> directory and forces a full rebuild from scratch:
-> ```bash
-> cargo clean && cargo build --release
-> ```
+## Examples and Experiments
 
-## Examples
+Four experiment scripts validate the theory and produce data for paper figures. Full descriptions, usage, and numerical results are in **[experiments/README.md](experiments/README.md)**.
 
-### Experiment 1: Coordinate Bias (`bias_experiment`)
+| Example | What it does |
+|---------|-------------|
+| `bias_experiment` | L1 vs L2 coordinate bias (21× ratio, 2000 MC samples) |
+| `pose_inference` | Single/multi-camera pose estimation, Laplace vs SP (1–12 cameras, configurable landmarks and overlap) |
+| `multicam_saddlepoint` | Camera-count sweep showing c₁ scaling (2–12 cameras) |
+| `multicam_experiment` | SP correction validated against MC integration (200k samples) |
 
-Demonstrates that Lie-Cartan exponential coordinates (first kind) produce unbiased pose estimates while second-kind (additive) coordinates [Ω, T] show systematic translational bias. This validates Proposition 1 in the paper (§II.3).
-
-**Setup:** A camera at a known pose observes N landmarks with Gaussian noise. The pose is estimated by point cloud alignment (Gauss-Newton on SE(3)). Repeated over 2000 noise realizations, the empirical mean is compared in both coordinate systems.
-
-**Paper config** (N=3, σ=1.0): produces a dramatic 21× bias ratio, demonstrating the effect with few, noisy landmarks.
-
-**Mild config** (N=8, σ=0.5): ~3× ratio, showing the effect persists with more landmarks and lower noise.
-
+**Quick start:**
 ```bash
-cargo run --release --example bias_experiment          # paper config: N=3, σ=1.0
-cargo run --release --example bias_experiment mild     # mild config: N=8, σ=0.5
-```
-
-**Output:**
-- Console: mean and std in L1 (exponential) and L2 (additive) coordinates, bias ratio
-- CSV: `experiments/data/bias_experiment.csv` with per-sample data for scatter plots (paper Figs. 1–2)
-
-**Plotting** (from repo root):
-
-```bash
-python experiments/plot_bias_experiment.py
-# → paper/figures/bias_scatter_translation.{pgf,png}
-# → paper/figures/bias_scatter_rotation.{pgf,png}
-```
-
-See [experiments/README.md](experiments/README.md) for style conventions and the template for new plot scripts.
-
-### Experiment 2: Pose Inference (`pose_inference`)
-
-The core use case: estimate camera pose by maximizing the marginalized posterior over landmark positions, comparing Laplace vs saddlepoint-corrected objectives. This is the full pipeline connecting all three paper contributions.
-
-**Setup:** A camera observes 12 landmarks at varying depths with uncertain 3D priors. The negative log marginalized posterior is optimized over SE(3) using damped Newton with compositive updates f ← f·exp(δξ).
-
-**Part 1 — 1D sweep:** Evaluates both objectives at 21 points along the depth (t_z) direction, revealing where each peaks. The saddlepoint minimum shifts relative to Laplace because close landmarks have depth-dependent non-Gaussian corrections.
-
-**Part 2 — Full 6D optimization:** Runs Newton from a perturbed initial guess, once for Laplace and once for saddlepoint. Both converge, but to slightly different poses.
-
-**Part 3 — Comparison:** Prints converged poses alongside ground truth, pose error metrics, and per-landmark SP correction magnitudes.
-
-**Part 4 — Per-landmark detail:** Shows c₁ vs depth at the Laplace optimum, confirming that closer landmarks drive the correction.
-
-```bash
-cargo run --release --example pose_inference           # moderate range (depth≈8, σ_prior=2)
-cargo run --release --example pose_inference close     # close range (depth≈4, σ_prior=3)
-```
-
-The `close` regime is where the Laplace–saddlepoint divergence is largest — the projective non-Gaussianity is strongest when σ_depth/depth is non-negligible.
-
-### Experiment 3: Multi-Camera Saddlepoint (`multicam_saddlepoint`)
-
-Saddlepoint-corrected landmark marginalization with 2–12 cameras observing a shared 3D point cloud in a ring configuration. Demonstrates how the correction magnitude decreases as more cameras constrain each landmark.
-
-**Setup:** Cameras arranged in a ring at radius 8m, all looking at the origin. 20 landmarks in [−2, 2]³. Each landmark is optimized and marginalized using the multi-camera API.
-
-```bash
-cargo run --release --example multicam_saddlepoint             # default: 4 cameras, 20 landmarks
-cargo run --release --example multicam_saddlepoint 2 30        # stereo, 30 landmarks
-cargo run --release --example multicam_saddlepoint 12 20       # 12 cameras, 20 landmarks
-```
-
-**Output:**
-- Per-landmark table: views, depth, c₁, A/12, B/8, −Q₄/8
-- Camera-count sweep (2–12 cameras) for a test point at the origin
-- CSV: `experiments/data/multicam_saddlepoint.csv`
-
-**Key finding:** The stereo case (2 cameras) produces corrections ~200× larger than 4-camera, confirming the correction matters most in the typical multi-view operating regime.
-
-### Experiment 4: Extended Multi-Camera Analysis (`multicam_experiment`)
-
-More detailed multi-camera experiment with Monte Carlo integration as ground truth for the marginal integral. Validates the saddlepoint correction against numerical integration.
-
-**Setup:** Similar to Experiment 3 but adds importance-sampling MC integration (200k samples) for 1–2 camera configurations, plus a depth-dependence sweep.
-
-```bash
-cargo run --release --example multicam_experiment
-```
-
-**Output:**
-- Part 1: c₁ vs number of cameras (averaged over point cloud)
-- Part 2: Laplace vs saddlepoint vs MC comparison (1 and 2 cameras)
-- Part 3: c₁ vs depth at fixed 2-camera baseline
-- CSV: `experiments/data/multicam_experiment.csv`
-
-## Reproducing Paper Figures
-
-All paper figures use the **Matplotlib → PGF** pipeline: Rust examples
-emit CSV data to `experiments/data/`, Python scripts produce `.pgf`
-files (LaTeX source for TikZ) in `paper/figures/`, which are `\input`'d
-into the manuscript so that figure text is rendered with the document's
-own fonts. PNG previews are saved alongside for quick inspection.
-
-The full guide — shared style conventions, color palette, figure sizing
-for IEEE column widths, a copy-paste template for new plot scripts, and
-LaTeX integration instructions — lives in
-**[experiments/README.md](experiments/README.md)**.
-
-### Quick reference
-
-| Figure | Rust example | Plot script | Output in `paper/figures/` |
-|--------|-------------|-------------|---------------------------|
-| Bias scatter (translation) | `rust/examples/bias_experiment.rs` | `experiments/plot_bias_experiment.py` | `bias_scatter_translation.{pgf,png}` |
-| Bias scatter (rotation) | `rust/examples/bias_experiment.rs` | `experiments/plot_bias_experiment.py` | `bias_scatter_rotation.{pgf,png}` |
-| 2nd-order covariance accuracy | `rust/src/propagation.rs` (MC) | `experiments/plot_propagation.py` | Planned |
-| Convergence: margMAP vs BA | `rust/examples/pose_inference.rs` | `experiments/plot_convergence.py` | Planned |
-| Saddlepoint c₁ vs depth | `rust/examples/multicam_saddlepoint.rs` | `experiments/plot_saddlepoint.py` | Planned |
-| c₁ vs number of cameras | `rust/examples/multicam_saddlepoint.rs` | `experiments/plot_saddlepoint.py` | Planned |
-| SP validity regime sweep | `rust/examples/multicam_experiment.rs` | `experiments/plot_sp_regime.py` | Planned |
-
-### End-to-end example (from repo root)
-
-```bash
-# 1. Create output directories (once)
-mkdir -p experiments/data paper/figures
-
-# 2. Generate data
 cd rust
-cargo run --release --example bias_experiment
-cd ..
-
-# 3. Plot
-python experiments/plot_bias_experiment.py
-
-# 4. Include in paper (note: \input, not \includegraphics — PGF is LaTeX source)
-#    \begin{figure}[t]
-#        \centering
-#        \input{figures/bias_scatter_translation.pgf}
-#        \caption{…}
-#    \end{figure}
+cargo run --release --example pose_inference              # single camera
+cargo run --release --example pose_inference 4 20 0.8     # 4 cameras, 20 landmarks, 80% overlap
 ```
 
-To add a new figure for another experiment, follow the template and
-checklist in [experiments/README.md §4](experiments/README.md).
+**Key findings** (details in [experiments/README.md](experiments/README.md)):
+- Analytical Q₄ fixes SP convergence: 60+ iterations → 5 iterations
+- Single camera: depth soft mode limits translation accuracy (~6.4m error), SP correction is only ~8.5cm — information-theoretic, not approximation, limitation
+- 4 cameras: depth triangulated (~0.5m error), c₁ drops from 2×10⁻² to 2×10⁻⁴
+
+Paper figures use the **Matplotlib → PGF** pipeline. See [experiments/README.md](experiments/README.md) for the full plotting guide, style conventions, and reproduction instructions.
 
 ### Pending Work
 
 | Item | Priority | Description |
 |------|----------|-------------|
-| Remaining plot scripts | High | `experiments/plot_propagation.py`, `experiments/plot_convergence.py`, `experiments/plot_saddlepoint.py`, `experiments/plot_sp_regime.py` (see [experiments/README.md §5](experiments/README.md)) |
+| Remaining plot scripts | High | `plot_propagation.py`, `plot_convergence.py`, `plot_saddlepoint.py`, `plot_sp_regime.py` |
 | Good Notations | High | Good consistent notations that the target audience knows |
 | Experimental findings | High | Our paper must be based on repeatable experiments |
-| More examples | Medium | An example script for pose and 3D landmark inference |
 | Verify Solà notation | Medium | Mathematica scripts to confirm notation mappings |
 | Depth soft mode analysis | Medium | Investigate multi-camera or prior-based approaches to resolve the translation degeneracy |
 
@@ -301,15 +177,12 @@ checklist in [experiments/README.md §4](experiments/README.md).
 
 | Item | Resolution |
 |------|------------|
-| Plotting workflow | ✅ Documented in [experiments/README.md](experiments/README.md): shared style, PGF pipeline, templates, LaTeX integration |
-| Pose inference example | ✅ `rust/examples/pose_inference.rs`: full 6D Newton with SP-corrected marginal, 1D sweep + comparison |
-| Closed-form J_t | ✅ Derived T-form with α = (sinΘ−Θ)/(2(1−cosΘ)), verified to 7.3×10⁻¹⁰ |
-| T-form symbolic proof | ✅ Proven in Mathematica: 9/9 Ω substitutions with symbolic T (`verification/CouplingJacobianDerivation.m`) |
-| Erratum eq 78 | ✅ Second equality was wrong: RHS is β, not α. Corrected in paper |
-| Saddlepoint correction formula | ✅ Corrected to c₁ = (1/12)A + (1/8)B − (1/8)Q₄, verified against quadrature |
-| SE(3) Jacobian FD test | ✅ Was `#[ignore]`, now passing (bug was in original j_coupling, not the formula) |
-| Closed-form Q₄ | ✅ Analytical quartic contraction using P, H, D3 — no 4th derivatives of π needed. Eliminates nested FD; SP optimizer converges in 5 iterations (was 60+). Verified against FD of exact Hessian |
-| Pose inference panics | ✅ Fixed NaN/degenerate configurations, added pose prior for depth regularization |
+| Plotting workflow | ✅ Documented in [experiments/README.md](experiments/README.md) |
+| Pose inference example | ✅ Single + multi-camera with configurable CLI args |
+| Closed-form J_t | ✅ T-form verified to 7.3×10⁻¹⁰; symbolic proof in Mathematica (9/9 subs) |
+| Saddlepoint formula | ✅ c₁ = (1/12)A + (1/8)B − (1/8)Q₄, verified against quadrature |
+| Closed-form Q₄ | ✅ Analytical quartic contraction; SP converges in 5 iterations (was 60+) |
+| Pose inference panics | ✅ Fixed NaN/degenerate configurations, added pose prior |
 
 ## Notation Correspondence with Solà et al. / Barfoot
 
@@ -345,75 +218,6 @@ All 6×6 matrices are related by the block permutation P = [[0, I₃]; [I₃, 0]
 2. **det S = 2(1 − cos Θ)/Θ²** — Exact volume element for Lie-Cartan coordinate chart. Needed for density transformations between [Ω, t] and [Ω, T] coordinates. Continuous at Θ = 0 (det S → 1), vanishes at Θ = 2π.
 
 3. **Compact T-form coupling Jacobian** — Single-line formula for ∂[S⁻¹T]/∂Ω with projector decomposition into axial and transverse components, replacing Barfoot's four-line iterated cross-product expansion. Proven algebraically equivalent in Mathematica (verification/CouplingJacobianDerivation.m, 9/9 Ω substitutions).
-
-## Multi-Camera Saddlepoint Results
-
-### Camera-count sweep (test point at origin)
-
-| N_cam | views | σ_depth | σ/depth | c₁ |
-|------:|------:|--------:|--------:|---:|
-| 2 | 2 | 0.028 | 0.0037 | 7.5×10⁻³ |
-| 3 | 3 | 0.031 | 0.0041 | −1.2×10⁻⁶ |
-| 4 | 4 | 0.028 | 0.0037 | −3.5×10⁻⁵ |
-| 6 | 6 | 0.023 | 0.0031 | −2.4×10⁻⁵ |
-| 8 | 8 | 0.020 | 0.0026 | −1.8×10⁻⁵ |
-| 12 | 12 | 0.016 | 0.0022 | −1.2×10⁻⁵ |
-
-### Stereo full point cloud (2 cameras, 30 landmarks)
-
-- 100% saddlepoint validity across all landmarks
-- Individual corrections up to c₁ ≈ 9×10⁻³
-- Cumulative correction: Σ|Δ| = 4.4×10⁻²
-- Correction dominated by negative Q₄ term (depth non-Gaussianity)
-
-## Pose Inference: Analytical Q₄ and the Depth Soft Mode
-
-### The nested finite-difference problem
-
-The original saddlepoint implementation computed Q₄ via finite differences (FD) of the Hessian. This created a nested FD problem: the outer pose optimizer also uses FD for its gradient and Hessian. The inner FD at h=1e-5 forced the outer FD to use h=1e-3 to avoid interference, producing noisy gradients that prevented quadratic convergence:
-
-| Method | Iterations | Final |grad| | Step sizes |
-|--------|-----------|----------------|------------|
-| Laplace (before) | 5 | 1e-10 | h_grad=1e-5, h_hess=1e-4 |
-| Saddlepoint (before, FD Q₄) | 60+ | ~2.5 | h_grad=1e-3, h_hess=1e-3 |
-| **Saddlepoint (analytical Q₄)** | **5** | **5e-10** | **h_grad=1e-5, h_hess=1e-4** |
-
-### The analytical formula
-
-At the mode (residual e ≈ 0), the 4th derivative of the NLL has a clean closed form:
-
-```
-f''''_{abcd} = Σ_{mn} Σ⁻¹_{mn} × [
-  P_{ma}·D3ⁿ_{bcd} + P_{mb}·D3ⁿ_{acd} + P_{mc}·D3ⁿ_{abd} + P_{md}·D3ⁿ_{abc}
-  + H^m_{ab}·Hⁿ_{cd} + H^m_{ac}·Hⁿ_{bd} + H^m_{ad}·Hⁿ_{bc}
-]
-```
-
-where P = project_jacobian, H = project_hessian, D3 = project_third_deriv. The D4·e term vanishes at the mode (same reason the D3·e term vanishes for third cumulants). The prior contributes zero (quadratic → zero 4th derivative). The contraction Q₄ = Σ f4_{abcd} · S_{ab} · S_{cd} is computed in camera frame where S = R·H⁻¹·Rᵀ.
-
-### The depth soft mode conclusion
-
-With analytical Q₄, the saddlepoint optimizer converges identically to Laplace (5 iterations, |grad|→1e-10). The results reveal a fundamental limitation:
-
-```
-                           True      Laplace  Saddlepoint
-  t₃ (depth)          0.000000     6.451333     6.366716
-
-  Translation error:
-    Laplace:      6.454793 m
-    Saddlepoint:  6.370215 m
-    Difference:   0.084597 m
-```
-
-The saddlepoint correction shifts the estimate by only ~8.5cm on a ~6.4m error. The per-landmark corrections c₁ ≈ 2% are mathematically correct — they capture the non-Gaussian skewness of each landmark marginal — but they cannot resolve the **depth soft mode**, which is a geometric degeneracy: with a single camera, the projection π(x) = [x/z, y/z] is nearly invariant under joint camera-landmark depth rescaling.
-
-**This is an information-theoretic limitation, not an approximation artifact.** The saddlepoint correctly refines the *shape* of each landmark's marginal, but no per-landmark correction can create depth information that isn't present in the observations. Resolving the depth soft mode requires:
-
-- **Multi-camera / stereo baselines** — parallax provides direct depth triangulation
-- **Strong pose priors** — constrain the translation subspace directly
-- **Known-scale constraints** — e.g., known inter-landmark distances or IMU-derived scale
-
-The multi-camera experiments (Experiments 3–4) confirm this: with 4+ cameras on a ring, depth is well-constrained and both Laplace and saddlepoint give accurate results, with the SP correction properly accounting for residual non-Gaussianity.
 
 ## Mathematica Verification
 
