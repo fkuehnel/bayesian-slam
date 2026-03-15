@@ -61,7 +61,9 @@ fn fd_gradient(
     sig_zz_inv: &[[f64; 2]; 2],
     use_sp: bool,
 ) -> Vec6 {
-    let h = 1e-5;
+    // SP objective uses inner FD (h=1e-5) for Q₄, so outer FD must be larger
+    // to avoid nested-FD noise amplification. Laplace has no inner FD.
+    let h = if use_sp { 1e-3 } else { 1e-5 };
     let (f0, _) = eval(pose, obs, sig_zz_inv, use_sp);
     std::array::from_fn(|j| {
         let mut ep = [0.0; 6]; ep[j] = h;
@@ -85,7 +87,8 @@ fn fd_hessian(
     sig_zz_inv: &[[f64; 2]; 2],
     use_sp: bool,
 ) -> Mat6 {
-    let h = 1e-4;
+    // Use larger step for SP to avoid interference with inner Q₄ FD (h=1e-5)
+    let h = if use_sp { 1e-3 } else { 1e-4 };
     let (f0, _) = eval(pose, obs, sig_zz_inv, use_sp);
     let mut hess = [[0.0f64; 6]; 6];
 
@@ -168,7 +171,8 @@ fn optimize_pose(
     let mut pose = *initial;
     let mut lambda = 1e-3; // LM damping
 
-    for iter in 0..30 {
+    let max_iter = if use_sp { 60 } else { 30 };
+    for iter in 0..max_iter {
         let (obj, _) = eval(&pose, obs, sig_zz_inv, use_sp);
         let grad = fd_gradient(&pose, obs, sig_zz_inv, use_sp);
         let gnorm: f64 = grad.iter().map(|x| x * x).sum::<f64>().sqrt();
