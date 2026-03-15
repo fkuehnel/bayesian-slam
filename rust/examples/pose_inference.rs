@@ -39,6 +39,28 @@ impl Rng {
 fn iso2(s: f64) -> [[f64; 2]; 2] { let v = 1.0/(s*s); [[v,0.0],[0.0,v]] }
 fn iso3(s: f64) -> Mat3 { let v = 1.0/(s*s); [[v,0.0,0.0],[0.0,v,0.0],[0.0,0.0,v]] }
 
+// ── Pose prior ───────────────────────────────────────────────────────
+
+/// Gaussian prior on the pose in the Lie algebra.
+///
+/// NLL_prior = ½ ||log(f_prior⁻¹ ∘ f)||²_{Σ_ξ⁻¹}
+struct PosePrior {
+    pose_ref: Pose,
+    sigma_rot: f64,    // std dev for rotation components (rad)
+    sigma_trans: f64,  // std dev for translation components (m)
+}
+
+impl PosePrior {
+    /// Negative log-prior: ½ Σ (ξ_i / σ_i)²
+    fn nll(&self, pose: &Pose) -> f64 {
+        let delta = self.pose_ref.relative(pose).log();
+        let sr2 = 1.0 / (self.sigma_rot * self.sigma_rot);
+        let st2 = 1.0 / (self.sigma_trans * self.sigma_trans);
+        0.5 * ((delta[0]*delta[0] + delta[1]*delta[1] + delta[2]*delta[2]) * sr2
+             + (delta[3]*delta[3] + delta[4]*delta[4] + delta[5]*delta[5]) * st2)
+    }
+}
+
 // ── Marginalized objective ─────────────────────────────────────────
 
 /// Evaluate negative marginalized log-posterior at a given pose.
@@ -48,10 +70,11 @@ fn eval(
     obs: &[([f64; 2], Vec3, Mat3)],
     sig_zz_inv: &[[f64; 2]; 2],
     use_sp: bool,
+    prior: &PosePrior,
 ) -> (f64, MarginalizedMapResult) {
     let r = evaluate_marginalized_map(&pose.rot, &pose.trans, obs, sig_zz_inv, 15);
     let v = if use_sp { -r.log_posterior_sp } else { -r.log_posterior_laplace };
-    (v, r)
+    (v + prior.nll(pose), r)
 }
 
 /// FD gradient of the objective w.r.t. right perturbation δξ.
@@ -60,14 +83,17 @@ fn fd_gradient(
     obs: &[([f64; 2], Vec3, Mat3)],
     sig_zz_inv: &[[f64; 2]; 2],
     use_sp: bool,
+    prior: &PosePrior,
 ) -> Vec6 {
-    let h = 1e-5;
-    let (f0, _) = eval(pose, obs, sig_zz_inv, use_sp);
+    // SP objective uses inner FD (h=1e-5) for Q₄, so outer FD must be larger
+    // to avoid nested-FD noise amplification. Laplace has no inner FD.
+    let h = if use_sp { 1e-3 } else { 1e-5 };
+    let (f0, _) = eval(pose, obs, sig_zz_inv, use_sp, prior);
     std::array::from_fn(|j| {
         let mut ep = [0.0; 6]; ep[j] = h;
         let mut em = [0.0; 6]; em[j] = -h;
-        let (vp, _) = eval(&pose.compose(&Pose::exp(&ep)), obs, sig_zz_inv, use_sp);
-        let (vm, _) = eval(&pose.compose(&Pose::exp(&em)), obs, sig_zz_inv, use_sp);
+        let (vp, _) = eval(&pose.compose(&Pose::exp(&ep)), obs, sig_zz_inv, use_sp, prior);
+        let (vm, _) = eval(&pose.compose(&Pose::exp(&em)), obs, sig_zz_inv, use_sp, prior);
         // Fall back to one-sided differences when central difference hits a singularity
         match (vp.is_finite(), vm.is_finite()) {
             (true, true) => (vp - vm) / (2.0 * h),
@@ -84,9 +110,11 @@ fn fd_hessian(
     obs: &[([f64; 2], Vec3, Mat3)],
     sig_zz_inv: &[[f64; 2]; 2],
     use_sp: bool,
+    prior: &PosePrior,
 ) -> Mat6 {
-    let h = 1e-4;
-    let (f0, _) = eval(pose, obs, sig_zz_inv, use_sp);
+    // Use larger step for SP to avoid interference with inner Q₄ FD (h=1e-5)
+    let h = if use_sp { 1e-3 } else { 1e-4 };
+    let (f0, _) = eval(pose, obs, sig_zz_inv, use_sp, prior);
     let mut hess = [[0.0f64; 6]; 6];
 
     // Cache f(x ± h*ei), using one-sided FD when a direction hits a singularity
@@ -94,9 +122,9 @@ fn fd_hessian(
     let mut fm = [0.0f64; 6];
     for i in 0..6 {
         let mut ei = [0.0; 6]; ei[i] = h;
-        (fp[i], _) = eval(&pose.compose(&Pose::exp(&ei)), obs, sig_zz_inv, use_sp);
+        (fp[i], _) = eval(&pose.compose(&Pose::exp(&ei)), obs, sig_zz_inv, use_sp, prior);
         ei[i] = -h;
-        (fm[i], _) = eval(&pose.compose(&Pose::exp(&ei)), obs, sig_zz_inv, use_sp);
+        (fm[i], _) = eval(&pose.compose(&Pose::exp(&ei)), obs, sig_zz_inv, use_sp, prior);
         let fpi = if fp[i].is_finite() { fp[i] } else { f0 };
         let fmi = if fm[i].is_finite() { fm[i] } else { f0 };
         fp[i] = fpi;
@@ -110,10 +138,10 @@ fn fd_hessian(
         let mut epm = [0.0;6]; epm[i] = h; epm[j] = -h;
         let mut emp = [0.0;6]; emp[i] = -h; emp[j] = h;
         let mut emm = [0.0;6]; emm[i] = -h; emm[j] = -h;
-        let (fpp, _) = eval(&pose.compose(&Pose::exp(&epp)), obs, sig_zz_inv, use_sp);
-        let (fpm, _) = eval(&pose.compose(&Pose::exp(&epm)), obs, sig_zz_inv, use_sp);
-        let (fmp, _) = eval(&pose.compose(&Pose::exp(&emp)), obs, sig_zz_inv, use_sp);
-        let (fmm, _) = eval(&pose.compose(&Pose::exp(&emm)), obs, sig_zz_inv, use_sp);
+        let (fpp, _) = eval(&pose.compose(&Pose::exp(&epp)), obs, sig_zz_inv, use_sp, prior);
+        let (fpm, _) = eval(&pose.compose(&Pose::exp(&epm)), obs, sig_zz_inv, use_sp, prior);
+        let (fmp, _) = eval(&pose.compose(&Pose::exp(&emp)), obs, sig_zz_inv, use_sp, prior);
+        let (fmm, _) = eval(&pose.compose(&Pose::exp(&emm)), obs, sig_zz_inv, use_sp, prior);
         let v = if fpp.is_finite() && fpm.is_finite() && fmp.is_finite() && fmm.is_finite() {
             (fpp - fpm - fmp + fmm) / (4.0 * h * h)
         } else {
@@ -163,14 +191,16 @@ fn optimize_pose(
     obs: &[([f64; 2], Vec3, Mat3)],
     sig_zz_inv: &[[f64; 2]; 2],
     use_sp: bool,
+    prior: &PosePrior,
     label: &str,
 ) -> Pose {
     let mut pose = *initial;
     let mut lambda = 1e-3; // LM damping
 
-    for iter in 0..30 {
-        let (obj, _) = eval(&pose, obs, sig_zz_inv, use_sp);
-        let grad = fd_gradient(&pose, obs, sig_zz_inv, use_sp);
+    let max_iter = if use_sp { 60 } else { 30 };
+    for iter in 0..max_iter {
+        let (obj, _) = eval(&pose, obs, sig_zz_inv, use_sp, prior);
+        let grad = fd_gradient(&pose, obs, sig_zz_inv, use_sp, prior);
         let gnorm: f64 = grad.iter().map(|x| x * x).sum::<f64>().sqrt();
 
         if iter % 5 == 0 || gnorm < 1e-7 {
@@ -180,7 +210,7 @@ fn optimize_pose(
         if gnorm < 1e-7 { break; }
 
         // Damped Hessian
-        let mut hess = fd_hessian(&pose, obs, sig_zz_inv, use_sp);
+        let mut hess = fd_hessian(&pose, obs, sig_zz_inv, use_sp, prior);
         for i in 0..6 { hess[i][i] += lambda; }
 
         let neg_grad: Vec6 = std::array::from_fn(|i| -grad[i]);
@@ -190,9 +220,9 @@ fn optimize_pose(
         let step_ok = delta.iter().all(|d| d.is_finite());
         let candidate = pose.compose(&Pose::exp(&delta));
         let (new_obj, _) = if step_ok {
-            eval(&candidate, obs, sig_zz_inv, use_sp)
+            eval(&candidate, obs, sig_zz_inv, use_sp, prior)
         } else {
-            (f64::INFINITY, eval(&pose, obs, sig_zz_inv, use_sp).1)
+            (f64::INFINITY, eval(&pose, obs, sig_zz_inv, use_sp, prior).1)
         };
 
         if new_obj.is_finite() && new_obj < obj {
@@ -208,7 +238,7 @@ fn optimize_pose(
                     let gd_step: Vec6 = std::array::from_fn(|i| -alpha * grad[i]);
                     if !gd_step.iter().all(|d| d.is_finite()) { break; }
                     let gd_candidate = pose.compose(&Pose::exp(&gd_step));
-                    let (gd_obj, _) = eval(&gd_candidate, obs, sig_zz_inv, use_sp);
+                    let (gd_obj, _) = eval(&gd_candidate, obs, sig_zz_inv, use_sp, prior);
                     if gd_obj.is_finite() && gd_obj < obj {
                         pose = gd_candidate;
                         lambda = 1e-1; // reset damping
@@ -286,7 +316,13 @@ fn main() {
         observations.push((z, x_prior, sig_xx_inv));
     }
 
+    // Pose prior centered at the initial guess
+    // σ_rot = 0.3 rad ≈ 17°, σ_trans = 2.0 m — "we roughly know where we started"
+    let sigma_pose_rot = 0.3;
+    let sigma_pose_trans = 2.0;
+
     println!("  {} landmarks, σ_z={}, σ_prior={}", observations.len(), sigma_z, sigma_prior);
+    println!("  Pose prior: σ_rot={} rad, σ_trans={} m", sigma_pose_rot, sigma_pose_trans);
     println!("  True pose ξ = [{:.4}, {:.4}, {:.4}, {:.4}, {:.4}, {:.4}]\n",
         xi_true[0], xi_true[1], xi_true[2], xi_true[3], xi_true[4], xi_true[5]);
 
@@ -296,6 +332,13 @@ fn main() {
     println!("──────────────────────────────────────────────────────────\n");
     println!("{:>8} {:>14} {:>14} {:>12}  {:>6} {:>6}",
         "δt_z", "neg_log_Lap", "neg_log_SP", "Δ(SP-Lap)", "n_val", "n_inv");
+
+    // For the 1D sweep, use true pose as prior center (to isolate the SP effect)
+    let sweep_prior = PosePrior {
+        pose_ref: f_true,
+        sigma_rot: sigma_pose_rot,
+        sigma_trans: sigma_pose_trans,
+    };
 
     let n_sweep = 21;
     let sweep_range = 0.3;
@@ -307,8 +350,8 @@ fn main() {
         let mut xi_pert = xi_true;
         xi_pert[5] += dt;
         let pose = Pose::exp(&xi_pert);
-        let (obj_lap, r_lap) = eval(&pose, &observations, &sig_zz_inv, false);
-        let (obj_sp, _) = eval(&pose, &observations, &sig_zz_inv, true);
+        let (obj_lap, r_lap) = eval(&pose, &observations, &sig_zz_inv, false, &sweep_prior);
+        let (obj_sp, _) = eval(&pose, &observations, &sig_zz_inv, true, &sweep_prior);
 
         if obj_lap < best_lap.0 { best_lap = (obj_lap, dt); }
         if obj_sp < best_sp.0 { best_sp = (obj_sp, dt); }
@@ -341,13 +384,20 @@ fn main() {
     let (init_rot_err, init_trans_err) = pose_error(&f_true, &f_init);
     println!("  Initial pose error: rot={:.4} rad, trans={:.4} m\n", init_rot_err, init_trans_err);
 
+    // Pose prior centered at the initial guess (realistic: we know roughly where we are)
+    let pose_prior = PosePrior {
+        pose_ref: f_init,
+        sigma_rot: sigma_pose_rot,
+        sigma_trans: sigma_pose_trans,
+    };
+
     // Optimize with Laplace
     eprintln!("Optimizing with Laplace objective...");
-    let f_lap = optimize_pose(&f_init, &observations, &sig_zz_inv, false, "Laplace");
+    let f_lap = optimize_pose(&f_init, &observations, &sig_zz_inv, false, &pose_prior, "Laplace");
 
     // Optimize with saddlepoint
     eprintln!("Optimizing with saddlepoint objective...");
-    let f_sp = optimize_pose(&f_init, &observations, &sig_zz_inv, true, "Saddlepoint");
+    let f_sp = optimize_pose(&f_init, &observations, &sig_zz_inv, true, &pose_prior, "Saddlepoint");
 
     // ── Part 3: Comparison ──
     println!("──────────────────────────────────────────────────────────");
@@ -372,15 +422,15 @@ fn main() {
     println!("    Difference:   rot={:.6} rad, trans={:.6} m", lap_sp_rot, lap_sp_trans);
 
     // Objective values at the optima
-    let (obj_lap_at_lap, r_lap) = eval(&f_lap, &observations, &sig_zz_inv, false);
-    let (obj_sp_at_sp, r_sp) = eval(&f_sp, &observations, &sig_zz_inv, true);
+    let (obj_lap_at_lap, r_lap) = eval(&f_lap, &observations, &sig_zz_inv, false, &pose_prior);
+    let (obj_sp_at_sp, r_sp) = eval(&f_sp, &observations, &sig_zz_inv, true, &pose_prior);
 
     println!("\n  Objective at optimum:");
     println!("    Laplace:      {:.6}  (valid: {}, invalid: {})", obj_lap_at_lap, r_lap.n_valid, r_lap.n_invalid);
     println!("    Saddlepoint:  {:.6}  (valid: {}, invalid: {})", obj_sp_at_sp, r_sp.n_valid, r_sp.n_invalid);
 
     // SP correction magnitudes at the Laplace optimum
-    let (_, r_at_lap) = eval(&f_lap, &observations, &sig_zz_inv, true);
+    let (_, r_at_lap) = eval(&f_lap, &observations, &sig_zz_inv, true, &pose_prior);
     let c1_vals: Vec<f64> = r_at_lap.sp_results.iter().map(|r| r.c1).collect();
     let mean_c1 = c1_vals.iter().sum::<f64>() / c1_vals.len() as f64;
     let max_c1 = c1_vals.iter().fold(0.0f64, |a, b| a.max(b.abs()));
