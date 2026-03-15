@@ -10,7 +10,7 @@
 | `jacobians` | 13 | ✅ | J_ωr/J_ωl, analytic J_t (T-form), 6×6 SE(3) Jacobian (FD-verified) |
 | `projective` | 14 | ✅ | Project, Jacobian, Hessian, 3rd/4th derivs, third cumulants, analytical Q₄ (all FD-verified) |
 | `saddlepoint` | 10 | ✅ | Landmark GN optimizer, corrected c₁ formula, validity guard, analytical Q₄, multi-cam |
-| `propagation` | 10 | ✅ | First/second-order covariance transport, Levi-Civita, Isserlis correction, MC validation |
+| `propagation` | 10 | ✅ | First/second-order covariance transport, ε-identity Isserlis correction, MC validation |
 
 ## Key Verified Identities (Rust + Mathematica + Python)
 
@@ -23,12 +23,14 @@
 - Projective derivatives through 4th order verified against FD
 - Saddlepoint correction matches numerical quadrature to 6 significant figures
 - Analytical Q₄ (quartic contraction) verified against FD of exact Hessian
+- Second-order covariance correction via ε-ε identity matches brute-force Levi-Civita contraction to 10⁻¹⁴
 
 ## Design Principles
 
 - **No external dependencies for core algebra**: 3×3 and 6×6 matrices as fixed-size arrays, exploiting skew-symmetric and block-triangular structure
 - **Zero heap allocation in inner loops**: SO(3) Jacobians are `[[f64; 3]; 3]`, SE(3) ones are `[[f64; 6]; 6]`
 - **Defensive numerics**: Validity guard on saddlepoint (|c₁| > 0.5 → fall back to Laplace), Taylor expansions near singularities (Θ → 0, ε → 0)
+- **Algebraic index elimination**: Second-order Isserlis corrections use the ε-ε determinant identity instead of Levi-Civita loops, reducing the covariance correction from O(3⁶) to two 3×3 matrix multiplies (~20× fewer flops)
 - **Exhaustive FD validation**: Every Jacobian and derivative tested against central finite differences
 
 ## Getting Started
