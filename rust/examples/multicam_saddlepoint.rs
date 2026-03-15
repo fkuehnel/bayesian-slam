@@ -114,7 +114,7 @@ fn main() {
         let opt = optimize_landmark_multicam(&obs, xw, &sx_inv, 15);
         let lap = -opt.nll_opt - 0.5*opt.log_det_h
             + 1.5*(2.0*std::f64::consts::PI).ln();
-        let (sp, res) = landmark_marginal_multicam(&opt, &obs, &sx_inv);
+        let (sp, res) = landmark_marginal_multicam(&opt, &obs);
 
         sum_lap += lap;
         sum_sp  += sp;
@@ -174,7 +174,7 @@ fn main() {
         if obs.is_empty() { println!("{:>6} {:>6}", nc, 0); continue; }
 
         let opt = optimize_landmark_multicam(&obs, &tp, &sx_inv, 15);
-        let (_, res) = landmark_marginal_multicam(&opt, &obs, &sx_inv);
+        let (_, res) = landmark_marginal_multicam(&opt, &obs);
         let hi = inv3(&opt.hessian);
         let sd = hi[2][2].abs().sqrt();
 

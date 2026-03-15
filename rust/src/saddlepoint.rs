@@ -116,65 +116,8 @@ pub fn optimize_landmark(
 }
 
 // =========================================================================
-// Quartic contraction Q₄ by FD
+// Quartic contraction Q₄ — analytical closed form
 // =========================================================================
-
-/// Compute Q₄ = Σ f''''_{abcd} H⁻¹_{ab} H⁻¹_{cd} via FD of the Hessian trace.
-///
-/// Defines T(x) = tr(H_NLL(x) · H⁻¹_opt), then Q₄ = tr(H⁻¹_opt · Hess(T)).
-fn quartic_contraction(
-    rot: &Mat3, trans: &Vec3, x_opt: &Vec3,
-    sigma_zz_inv: &[[f64; 2]; 2], sigma_xx_inv: &Mat3,
-    h_inv: &Mat3,
-) -> f64 {
-    let h = 1e-5;
-
-    // Hessian of NLL at arbitrary world-frame point x
-    let hess_at = |x: &Vec3| -> Mat3 {
-        let xp = projective::transform_point(rot, trans, x);
-        if !xp[2].is_finite() || xp[2] < 1e-6 { return *sigma_xx_inv; }
-        let p = projective::project_jacobian(&xp);
-        let mut pr = [[0.0; 3]; 2];
-        for i in 0..2 { for j in 0..3 {
-            pr[i][j] = p[i][0]*rot[0][j] + p[i][1]*rot[1][j] + p[i][2]*rot[2][j];
-        }}
-        let mut hess = *sigma_xx_inv;
-        for i in 0..3 { for j in 0..3 {
-            for m in 0..2 { for n in 0..2 {
-                hess[i][j] += pr[m][i] * sigma_zz_inv[m][n] * pr[n][j];
-            }}
-        }}
-        hess
-    };
-
-    // T(x) = tr(H_NLL(x) · H⁻¹_opt)
-    let trace_func = |x: &Vec3| -> f64 {
-        let hx = hess_at(x);
-        let mut t = 0.0;
-        for a in 0..3 { for b in 0..3 { t += hx[a][b] * h_inv[a][b]; }}
-        t
-    };
-
-    // Hess(T) by central FD, contract with H⁻¹
-    let t0 = trace_func(x_opt);
-    let mut q4 = 0.0;
-    for c in 0..3 { for d in 0..3 {
-        let d2t = if c == d {
-            let mut xp = *x_opt; xp[c] += h;
-            let mut xm = *x_opt; xm[c] -= h;
-            (trace_func(&xp) - 2.0*t0 + trace_func(&xm)) / (h*h)
-        } else {
-            let mut xpp = *x_opt; xpp[c] += h; xpp[d] += h;
-            let mut xpm = *x_opt; xpm[c] += h; xpm[d] -= h;
-            let mut xmp = *x_opt; xmp[c] -= h; xmp[d] += h;
-            let mut xmm = *x_opt; xmm[c] -= h; xmm[d] -= h;
-            (trace_func(&xpp) - trace_func(&xpm) - trace_func(&xmp) + trace_func(&xmm))
-                / (4.0*h*h)
-        };
-        q4 += h_inv[c][d] * d2t;
-    }}
-    q4
-}
 
 // =========================================================================
 // Saddlepoint correction (Step 2) — corrected formula
@@ -254,9 +197,8 @@ pub fn saddlepoint_correction(
 /// Falls back to Laplace if |c₁| > MAX_CORRECTION.
 pub fn landmark_marginal_log_posterior(
     opt: &LandmarkOptResult,
-    rot: &Mat3, trans: &Vec3,
+    rot: &Mat3,
     sigma_zz_inv: &[[f64; 2]; 2],
-    sigma_xx_inv: &Mat3,
 ) -> (f64, SaddlepointResult) {
     let laplace = -opt.nll_opt - 0.5 * opt.log_det_h
         + 1.5 * (2.0 * std::f64::consts::PI).ln();
@@ -270,7 +212,7 @@ pub fn landmark_marginal_log_posterior(
     };
 
     let f3 = projective::third_cumulants(rot, &opt.xp_opt, sigma_zz_inv);
-    let q4 = quartic_contraction(rot, trans, &opt.x_opt, sigma_zz_inv, sigma_xx_inv, &h_inv);
+    let q4 = projective::quartic_contraction_analytical(rot, &opt.xp_opt, sigma_zz_inv, &h_inv);
     let result = saddlepoint_correction_full(&h_inv, &f3, q4);
 
     let log_post = match result.status {
@@ -318,7 +260,7 @@ pub fn evaluate_marginalized_map(
     for (z, x_prior, sigma_xx_inv) in observations {
         let opt = optimize_landmark(rot, trans, z, sigma_zz_inv, x_prior, sigma_xx_inv, max_gn_iter);
         let laplace_c = landmark_marginal_log_posterior_laplace(&opt);
-        let (sp_c, sp_r) = landmark_marginal_log_posterior(&opt, rot, trans, sigma_zz_inv, sigma_xx_inv);
+        let (sp_c, sp_r) = landmark_marginal_log_posterior(&opt, rot, sigma_zz_inv);
 
         match sp_r.status { SaddlepointStatus::Valid => n_valid += 1, _ => n_invalid += 1 }
         log_laplace += laplace_c;
@@ -442,66 +384,12 @@ pub fn optimize_landmark_multicam(
     }
 }
 
-/// Quartic contraction Q₄ for multi-camera case.
-fn quartic_contraction_multicam(
-    cameras: &[CameraObs], x_opt: &Vec3,
-    sigma_xx_inv: &Mat3, h_inv: &Mat3,
-) -> f64 {
-    let h = 1e-5;
-
-    let hess_at = |x: &Vec3| -> Mat3 {
-        let mut hess = *sigma_xx_inv;
-        for cam in cameras {
-            let xp = projective::transform_point(&cam.rot, &cam.trans, x);
-            if !xp[2].is_finite() || xp[2] < 1e-6 { continue; }
-            let p = projective::project_jacobian(&xp);
-            let mut pr = [[0.0; 3]; 2];
-            for i in 0..2 { for j in 0..3 {
-                pr[i][j] = p[i][0]*cam.rot[0][j] + p[i][1]*cam.rot[1][j] + p[i][2]*cam.rot[2][j];
-            }}
-            for i in 0..3 { for j in 0..3 {
-                for m in 0..2 { for n in 0..2 {
-                    hess[i][j] += pr[m][i] * cam.sigma_zz_inv[m][n] * pr[n][j];
-                }}
-            }}
-        }
-        hess
-    };
-
-    let trace_func = |x: &Vec3| -> f64 {
-        let hx = hess_at(x);
-        let mut t = 0.0;
-        for a in 0..3 { for b in 0..3 { t += hx[a][b] * h_inv[a][b]; }}
-        t
-    };
-
-    let t0 = trace_func(x_opt);
-    let mut q4 = 0.0;
-    for c in 0..3 { for d in 0..3 {
-        let d2t = if c == d {
-            let mut xp = *x_opt; xp[c] += h;
-            let mut xm = *x_opt; xm[c] -= h;
-            (trace_func(&xp) - 2.0*t0 + trace_func(&xm)) / (h*h)
-        } else {
-            let mut xpp = *x_opt; xpp[c] += h; xpp[d] += h;
-            let mut xpm = *x_opt; xpm[c] += h; xpm[d] -= h;
-            let mut xmp = *x_opt; xmp[c] -= h; xmp[d] += h;
-            let mut xmm = *x_opt; xmm[c] -= h; xmm[d] -= h;
-            (trace_func(&xpp) - trace_func(&xpm) - trace_func(&xmp) + trace_func(&xmm))
-                / (4.0*h*h)
-        };
-        q4 += h_inv[c][d] * d2t;
-    }}
-    q4
-}
-
 /// Saddlepoint-corrected marginal for a landmark observed from multiple cameras.
 ///
-/// Third cumulants sum over cameras: f'''_total = Σ_i f'''_i
+/// Third cumulants and quartic contraction sum over cameras.
 pub fn landmark_marginal_multicam(
     opt: &MultiCamOptResult,
     cameras: &[CameraObs],
-    sigma_xx_inv: &Mat3,
 ) -> (f64, SaddlepointResult) {
     let laplace = -opt.nll_opt - 0.5 * opt.log_det_h
         + 1.5 * (2.0 * std::f64::consts::PI).ln();
@@ -514,17 +402,20 @@ pub fn landmark_marginal_multicam(
         }),
     };
 
-    // Sum third cumulants over all cameras
+    // Sum third cumulants and quartic contraction over all cameras
     let mut f3_total = [[[0.0f64; 3]; 3]; 3];
+    let mut q4 = 0.0;
     for (i, cam) in cameras.iter().enumerate() {
         if opt.xp_opts[i][2] < 1e-6 { continue; }
         let f3_i = projective::third_cumulants(&cam.rot, &opt.xp_opts[i], &cam.sigma_zz_inv);
         for a in 0..3 { for b in 0..3 { for c in 0..3 {
             f3_total[a][b][c] += f3_i[a][b][c];
         }}}
+        q4 += projective::quartic_contraction_analytical(
+            &cam.rot, &opt.xp_opts[i], &cam.sigma_zz_inv, &h_inv,
+        );
     }
 
-    let q4 = quartic_contraction_multicam(cameras, &opt.x_opt, sigma_xx_inv, &h_inv);
     let result = saddlepoint_correction_full(&h_inv, &f3_total, q4);
 
     let log_post = match result.status {
@@ -572,7 +463,7 @@ mod tests {
         let x = [0.5, -0.3, 10.0];
         let z = projective::project(&x);
         let opt = optimize_landmark(&rot, &trans, &z, &iso2(0.01), &x, &iso3(1.0), 10);
-        let (_, r) = landmark_marginal_log_posterior(&opt, &rot, &trans, &iso2(0.01), &iso3(1.0));
+        let (_, r) = landmark_marginal_log_posterior(&opt, &rot, &iso2(0.01));
         assert_eq!(r.status, SaddlepointStatus::Valid);
         assert!(r.c1.abs() < 0.1, "c₁ should be small: {:.4}", r.c1);
         eprintln!("Well-constrained: c₁={:.6}, A={:.4}, B={:.4}, Q₄={:.4}", r.c1, r.term_a, r.term_b, r.term_q4);
@@ -584,7 +475,7 @@ mod tests {
         let x = [0.5, -0.3, 3.0];
         let z = projective::project(&x);
         let opt = optimize_landmark(&rot, &trans, &z, &iso2(0.01), &x, &iso3(10.0), 10);
-        let (_, r) = landmark_marginal_log_posterior(&opt, &rot, &trans, &iso2(0.01), &iso3(10.0));
+        let (_, r) = landmark_marginal_log_posterior(&opt, &rot, &iso2(0.01));
         assert!(matches!(r.status, SaddlepointStatus::Invalid(_)),
             "Weak prior at close depth should be invalid: c₁={:.4}", r.c1);
     }
@@ -596,8 +487,8 @@ mod tests {
             &iso2(0.01), &[0.1,0.1,20.0], &iso3(1.0), 10);
         let close = optimize_landmark(&rot, &trans, &projective::project(&[0.1,0.1,5.0]),
             &iso2(0.01), &[0.1,0.1,5.0], &iso3(1.0), 10);
-        let (_, rf) = landmark_marginal_log_posterior(&far, &rot, &trans, &iso2(0.01), &iso3(1.0));
-        let (_, rc) = landmark_marginal_log_posterior(&close, &rot, &trans, &iso2(0.01), &iso3(1.0));
+        let (_, rf) = landmark_marginal_log_posterior(&far, &rot, &iso2(0.01));
+        let (_, rc) = landmark_marginal_log_posterior(&close, &rot, &iso2(0.01));
         assert!(rc.c1.abs() > rf.c1.abs(), "Close |c₁|={:.6} > far |c₁|={:.6}", rc.c1.abs(), rf.c1.abs());
     }
 
@@ -623,7 +514,7 @@ mod tests {
         let z = projective::project(&x);
         let opt = optimize_landmark(&rot, &trans, &z, &iso2(0.01), &x, &iso3(0.01), 10);
         let lap = landmark_marginal_log_posterior_laplace(&opt);
-        let (sp, r) = landmark_marginal_log_posterior(&opt, &rot, &trans, &iso2(0.01), &iso3(0.01));
+        let (sp, r) = landmark_marginal_log_posterior(&opt, &rot, &iso2(0.01));
         assert_eq!(r.status, SaddlepointStatus::Valid);
         assert!((lap - sp).abs() < 0.01, "Lap={:.6} SP={:.6}", lap, sp);
     }
@@ -635,7 +526,7 @@ mod tests {
         let z = projective::project(&x);
         let opt = optimize_landmark(&rot, &trans, &z, &iso2(0.01), &x, &iso3(1.0), 10);
         let h_inv = inv3(&opt.hessian);
-        let q4 = quartic_contraction(&rot, &trans, &opt.x_opt, &iso2(0.01), &iso3(1.0), &h_inv);
+        let q4 = projective::quartic_contraction_analytical(&rot, &opt.xp_opt, &iso2(0.01), &h_inv);
         assert!(q4.is_finite() && q4.abs() > 1e-10, "Q₄={:.2e}", q4);
     }
 
@@ -680,8 +571,8 @@ mod tests {
         assert!(err < 1e-8, "single multicam should match original: err={:.2e}", err);
 
         // Marginals should also agree
-        let (lp1, r1) = landmark_marginal_log_posterior(&opt1, &rot, &trans, &sig_z, &sig_x);
-        let (lpm, rm) = landmark_marginal_multicam(&opt_m, &cams, &sig_x);
+        let (lp1, r1) = landmark_marginal_log_posterior(&opt1, &rot, &sig_z);
+        let (lpm, rm) = landmark_marginal_multicam(&opt_m, &cams);
         assert!((lp1 - lpm).abs() < 1e-6,
             "log posteriors: single={:.6} multi={:.6}", lp1, lpm);
         assert!((r1.c1 - rm.c1).abs() < 1e-6,
@@ -702,14 +593,102 @@ mod tests {
         let opt2 = optimize_landmark_multicam(&[cam1.clone(), cam2.clone()], &x, &sig_x, 20);
         let opt3 = optimize_landmark_multicam(&[cam1.clone(), cam2.clone(), cam3.clone()], &x, &sig_x, 20);
 
-        let (_, r1) = landmark_marginal_multicam(&opt1, &[cam1.clone()], &sig_x);
-        let (_, r2) = landmark_marginal_multicam(&opt2, &[cam1.clone(), cam2.clone()], &sig_x);
-        let (_, r3) = landmark_marginal_multicam(&opt3, &[cam1, cam2, cam3], &sig_x);
+        let (_, r1) = landmark_marginal_multicam(&opt1, &[cam1.clone()]);
+        let (_, r2) = landmark_marginal_multicam(&opt2, &[cam1.clone(), cam2.clone()]);
+        let (_, r3) = landmark_marginal_multicam(&opt3, &[cam1, cam2, cam3]);
 
         eprintln!("c₁: 1cam={:.6}, 2cam={:.6}, 3cam={:.6}", r1.c1, r2.c1, r3.c1);
         assert!(r2.c1.abs() < r1.c1.abs(),
             "2 cameras should give smaller |c₁|: {:.6} vs {:.6}", r2.c1, r1.c1);
         // 3 cameras may or may not be smaller than 2 (depends on geometry), but should be valid
         assert!(matches!(r3.status, SaddlepointStatus::Valid));
+    }
+
+    /// FD quartic contraction (retained for validation against analytical version).
+    /// Uses the exact Hessian (including residual term) so FD matches the analytical formula.
+    fn quartic_contraction_fd(
+        rot: &Mat3, trans: &Vec3, x_opt: &Vec3,
+        z: &[f64; 2], // observation (needed for residual term)
+        sigma_zz_inv: &[[f64; 2]; 2], sigma_xx_inv: &Mat3,
+        h_inv: &Mat3,
+    ) -> f64 {
+        let h = 1e-5;
+        let hess_at = |x: &Vec3| -> Mat3 {
+            let xp = projective::transform_point(rot, trans, x);
+            if !xp[2].is_finite() || xp[2] < 1e-6 { return *sigma_xx_inv; }
+            let p = projective::project_jacobian(&xp);
+            let (h_u, h_v) = projective::project_hessian(&xp);
+            let pi = projective::project(&xp);
+            let e = [pi[0] - z[0], pi[1] - z[1]]; // residual
+            let mut pr = [[0.0; 3]; 2];
+            for i in 0..2 { for j in 0..3 {
+                pr[i][j] = p[i][0]*rot[0][j] + p[i][1]*rot[1][j] + p[i][2]*rot[2][j];
+            }}
+            let mut hess = *sigma_xx_inv;
+            let hess_pi = [&h_u, &h_v];
+            for i in 0..3 { for j in 0..3 {
+                for m in 0..2 { for n in 0..2 {
+                    // GN term: PR^T Σ⁻¹ PR
+                    hess[i][j] += sigma_zz_inv[m][n] * pr[m][i] * pr[n][j];
+                    // Residual term: e_m × H^(n)_world_{ij}
+                    let mut h_world_ij = 0.0;
+                    for k in 0..3 { for l in 0..3 {
+                        h_world_ij += hess_pi[n][k][l] * rot[k][i] * rot[l][j];
+                    }}
+                    hess[i][j] += sigma_zz_inv[m][n] * e[m] * h_world_ij;
+                }}
+            }}
+            hess
+        };
+        let trace_func = |x: &Vec3| -> f64 {
+            let hx = hess_at(x);
+            let mut t = 0.0;
+            for a in 0..3 { for b in 0..3 { t += hx[a][b] * h_inv[a][b]; }}
+            t
+        };
+        let t0 = trace_func(x_opt);
+        let mut q4 = 0.0;
+        for c in 0..3 { for d in 0..3 {
+            let d2t = if c == d {
+                let mut xp = *x_opt; xp[c] += h;
+                let mut xm = *x_opt; xm[c] -= h;
+                (trace_func(&xp) - 2.0*t0 + trace_func(&xm)) / (h*h)
+            } else {
+                let mut xpp = *x_opt; xpp[c] += h; xpp[d] += h;
+                let mut xpm = *x_opt; xpm[c] += h; xpm[d] -= h;
+                let mut xmp = *x_opt; xmp[c] -= h; xmp[d] += h;
+                let mut xmm = *x_opt; xmm[c] -= h; xmm[d] -= h;
+                (trace_func(&xpp) - trace_func(&xpm) - trace_func(&xmp) + trace_func(&xmm))
+                    / (4.0*h*h)
+            };
+            q4 += h_inv[c][d] * d2t;
+        }}
+        q4
+    }
+
+    #[test]
+    fn quartic_analytical_vs_fd() {
+        // Compare analytical Q₄ against FD version using exact Hessian (with residual term).
+        let test_cases: Vec<(Vec3, Vec3, Vec3)> = vec![
+            ([0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.5, -0.3, 10.0]),
+            ([0.1, -0.05, 0.2], [0.0, 0.0, -5.0], [1.0, 0.5, 8.0]),
+            ([0.3, 0.1, -0.15], [1.0, -0.5, 0.0], [0.2, -0.8, 6.0]),
+        ];
+        for (omega, trans, x) in &test_cases {
+            let rot = so3::exp(omega);
+            let z = projective::project(&projective::transform_point(&rot, trans, x));
+            let opt = optimize_landmark(&rot, trans, &z,
+                &iso2(0.01), x, &iso3(1.0), 20);
+            let h_inv = inv3(&opt.hessian);
+
+            let q4_fd = quartic_contraction_fd(&rot, trans, &opt.x_opt, &z, &iso2(0.01), &iso3(1.0), &h_inv);
+            let q4_an = projective::quartic_contraction_analytical(&rot, &opt.xp_opt, &iso2(0.01), &h_inv);
+
+            let rel_err = (q4_an - q4_fd).abs() / q4_fd.abs().max(1e-10);
+            eprintln!("Q₄: analytical={:.6e}, FD={:.6e}, rel_err={:.2e}", q4_an, q4_fd, rel_err);
+            assert!(rel_err < 0.01,
+                "Q₄ analytical vs FD mismatch: a={:.6e} fd={:.6e} rel={:.2e}",
+                q4_an, q4_fd, rel_err);
+        }
     }
 }
