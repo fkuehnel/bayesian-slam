@@ -33,6 +33,51 @@
 - **Algebraic index elimination**: Second-order Isserlis corrections use the ε-ε determinant identity instead of Levi-Civita loops, reducing the covariance correction from O(3⁶) to two 3×3 matrix multiplies (~20× fewer flops)
 - **Exhaustive FD validation**: Every Jacobian and derivative tested against central finite differences
 
+## Computational Cost: Saddlepoint vs Laplace
+
+The saddlepoint correction adds ~12,600 FLOPs per landmark on top of Laplace's ~860 FLOPs — a **15.6× overhead** that buys ~3000× better marginal accuracy.
+
+### Per-landmark flop budget
+
+| Step | FLOPs | Path |
+|------|------:|------|
+| GN optimization (3 iterations) | ~666 | Shared |
+| Final Hessian + NLL + det | ~193 | Shared |
+| **Laplace total** | **~860** | |
+| `third_cumulants()` | ~3,780 | SP only |
+| — camera-frame contraction | 864 | |
+| — rotation to world (3³×3³ tensor) | 2,916 | |
+| `quartic_contraction_analytical()` | ~4,985 | SP only |
+| — R·H⁻¹·Rᵀ sandwich | 162 | |
+| — 4-nested contraction (3⁴ × 2² × 14) | 4,779 | |
+| `saddlepoint_correction_full()` | ~3,778 | SP only |
+| — λ tensor (cross-contraction A) | 3,645 | |
+| — trace-contraction B + c₁ | 133 | |
+| H⁻¹ + ln(1+c₁) | ~33 | SP only |
+| **Saddlepoint total** | **~13,440** | |
+
+### Cost breakdown by component
+
+The three saddlepoint-only stages contribute roughly equally:
+
+- **Quartic contraction Q₄** — 40% of overhead (4,985 FLOPs). The 4-nested loop over 3D indices with 2×2 observation dimensions is unavoidable for the full f⁴·H⁻¹·H⁻¹ tensor contraction.
+- **Third cumulants κ₃** — 30% (3,780 FLOPs). Dominated by the rotation of the 3×3×3 cumulant tensor from camera to world frame.
+- **Cross-contraction A** — 29% (3,645 FLOPs). The λ_{abc} = f³·H⁻¹·H⁻¹·H⁻¹ intermediate tensor requires O(3⁶) work for the full 6-index contraction.
+
+### Multi-camera scaling
+
+With N cameras, cumulant computations scale linearly while the correction formula stays fixed:
+
+| Component | Cost |
+|-----------|------|
+| Per camera | `third_cumulants` + `quartic_contraction_analytical` = ~8,765 FLOPs |
+| Fixed | `saddlepoint_correction_full` = ~3,778 FLOPs |
+| **Total SP overhead** | **8,765N + 3,778 FLOPs** |
+
+### Practical impact
+
+In a SLAM system with L landmarks, the saddlepoint adds ~12,600L FLOPs per evaluation — negligible compared to the O(n³) sparse Cholesky factorization that dominates bundle adjustment. The correction is computed per landmark independently, making it trivially parallelizable.
+
 ## Getting Started
 
 ```bash
