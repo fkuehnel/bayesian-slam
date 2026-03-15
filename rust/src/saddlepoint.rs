@@ -59,7 +59,7 @@ pub fn optimize_landmark(
 
     for _ in 0..max_iter {
         let xp = projective::transform_point(rot, trans, &x);
-        if xp[2] < 1e-6 { break; }
+        if !xp[2].is_finite() || xp[2] < 1e-6 { break; }
 
         let pi = projective::project(&xp);
         let e = [z[0] - pi[0], z[1] - pi[1]];
@@ -85,6 +85,7 @@ pub fn optimize_landmark(
 
         let h_inv = match inv3_safe(&h) { Some(hi) => hi, None => break };
         let delta = mv3(&h_inv, &scale3(-1.0, &grad));
+        if !delta[0].is_finite() || !delta[1].is_finite() || !delta[2].is_finite() { break; }
         x = add3(&x, &delta);
         if norm3(&delta) < 1e-10 { break; }
     }
@@ -131,7 +132,7 @@ fn quartic_contraction(
     // Hessian of NLL at arbitrary world-frame point x
     let hess_at = |x: &Vec3| -> Mat3 {
         let xp = projective::transform_point(rot, trans, x);
-        if xp[2] < 1e-6 { return [[1e30; 3]; 3]; }
+        if !xp[2].is_finite() || xp[2] < 1e-6 { return *sigma_xx_inv; }
         let p = projective::project_jacobian(&xp);
         let mut pr = [[0.0; 3]; 2];
         for i in 0..2 { for j in 0..3 {
@@ -225,7 +226,9 @@ pub fn saddlepoint_correction_full(
 
     let c1 = term_a / 12.0 + term_b / 8.0 - q4 / 8.0;
 
-    let status = if c1.abs() <= MAX_CORRECTION {
+    let status = if !c1.is_finite() {
+        SaddlepointStatus::Invalid(c1)
+    } else if c1.abs() <= MAX_CORRECTION {
         SaddlepointStatus::Valid
     } else {
         SaddlepointStatus::Invalid(c1)
@@ -271,7 +274,10 @@ pub fn landmark_marginal_log_posterior(
     let result = saddlepoint_correction_full(&h_inv, &f3, q4);
 
     let log_post = match result.status {
-        SaddlepointStatus::Valid => laplace + (1.0 + result.c1).ln(),
+        SaddlepointStatus::Valid => {
+            let arg = 1.0 + result.c1;
+            if arg > 0.0 { laplace + arg.ln() } else { laplace }
+        }
         _ => laplace,
     };
     (log_post, result)
@@ -370,7 +376,7 @@ pub fn optimize_landmark_multicam(
 
         for cam in cameras {
             let xp = projective::transform_point(&cam.rot, &cam.trans, &x);
-            if xp[2] < 1e-6 { continue; }
+            if !xp[2].is_finite() || xp[2] < 1e-6 { continue; }
 
             let pi = projective::project(&xp);
             let e = [cam.z[0] - pi[0], cam.z[1] - pi[1]];
@@ -397,6 +403,7 @@ pub fn optimize_landmark_multicam(
 
         let h_inv = match inv3_safe(&h) { Some(hi) => hi, None => break };
         let delta = mv3(&h_inv, &scale3(-1.0, &grad));
+        if !delta[0].is_finite() || !delta[1].is_finite() || !delta[2].is_finite() { break; }
         x = add3(&x, &delta);
         if norm3(&delta) < 1e-10 { break; }
     }
@@ -446,7 +453,7 @@ fn quartic_contraction_multicam(
         let mut hess = *sigma_xx_inv;
         for cam in cameras {
             let xp = projective::transform_point(&cam.rot, &cam.trans, x);
-            if xp[2] < 1e-6 { continue; }
+            if !xp[2].is_finite() || xp[2] < 1e-6 { continue; }
             let p = projective::project_jacobian(&xp);
             let mut pr = [[0.0; 3]; 2];
             for i in 0..2 { for j in 0..3 {
@@ -521,7 +528,10 @@ pub fn landmark_marginal_multicam(
     let result = saddlepoint_correction_full(&h_inv, &f3_total, q4);
 
     let log_post = match result.status {
-        SaddlepointStatus::Valid => laplace + (1.0 + result.c1).ln(),
+        SaddlepointStatus::Valid => {
+            let arg = 1.0 + result.c1;
+            if arg > 0.0 { laplace + arg.ln() } else { laplace }
+        }
         _ => laplace,
     };
     (log_post, result)
@@ -529,7 +539,7 @@ pub fn landmark_marginal_multicam(
 
 fn inv3_safe(m: &Mat3) -> Option<Mat3> {
     let d = det3(m);
-    if d.abs() < 1e-30 { None } else { Some(inv3(m)) }
+    if !d.is_finite() || d.abs() < 1e-30 { None } else { Some(inv3(m)) }
 }
 
 // =========================================================================

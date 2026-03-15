@@ -28,7 +28,9 @@ use crate::so3;
 ///
 /// Returns (u, v). Panics if x₃' ≈ 0.
 pub fn project(xp: &Vec3) -> [f64; 2] {
-    assert!(xp[2].abs() > 1e-12, "point behind camera: x3'={}", xp[2]);
+    if !xp[2].is_finite() || xp[2].abs() <= 1e-12 {
+        return [f64::NAN, f64::NAN];
+    }
     let inv_z = 1.0 / xp[2];
     [xp[0] * inv_z, xp[1] * inv_z]
 }
