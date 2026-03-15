@@ -14,12 +14,19 @@
 //!   N_cameras     Number of cameras (default: 1)
 //!   N_landmarks   Number of landmarks (default: 12)
 //!   overlap       Fraction of landmarks visible to each camera, 0.0-1.0 (default: 1.0)
+//!   arc_degrees   Angular span of camera ring in degrees (default: 360.0)
+//!
+//! Special mode:
+//!   --sweep       Run convergence basin sweep (cameras × perturbation × method),
+//!                 writes CSV to experiments/data/convergence_sweep.csv
 //!
 //! Examples:
-//!   cargo run --release --example pose_inference                  # 1 camera, 12 landmarks
-//!   cargo run --release --example pose_inference 4                # 4 cameras, 12 landmarks
-//!   cargo run --release --example pose_inference 4 30 0.5         # 4 cameras, 30 landmarks, 50% overlap
-//!   cargo run --release --example pose_inference 2 20 0.7         # stereo, 20 landmarks, 70% overlap
+//!   cargo run --release --example pose_inference                    # 1 camera, 12 landmarks
+//!   cargo run --release --example pose_inference 4                  # 4 cameras, 12 landmarks
+//!   cargo run --release --example pose_inference 4 30 0.5           # 4 cameras, 30 landmarks, 50% overlap
+//!   cargo run --release --example pose_inference 4 30 0.5 90        # 4 cameras on 90° arc
+//!   cargo run --release --example pose_inference 2 20 0.7 180       # stereo, 180° arc
+//!   cargo run --release --example pose_inference --sweep            # convergence sweep
 
 use se3_inference::*;
 use se3_inference::se3::Pose;
@@ -45,10 +52,17 @@ fn iso2(s: f64) -> [[f64; 2]; 2] { let v = 1.0/(s*s); [[v,0.0],[0.0,v]] }
 fn iso3(s: f64) -> Mat3 { let v = 1.0/(s*s); [[v,0.0,0.0],[0.0,v,0.0],[0.0,0.0,v]] }
 
 // ── Camera ring ────────────────────────────────────────────────────
-/// Place n cameras on a ring of given radius, all looking at center.
-fn ring_cameras(n: usize, radius: f64, center: &Vec3) -> Vec<Pose> {
+/// Place n cameras on an arc of given radius, spanning `arc_rad` radians, looking at center.
+fn ring_cameras(n: usize, radius: f64, center: &Vec3, arc_rad: f64) -> Vec<Pose> {
     (0..n).map(|i| {
-        let a = 2.0 * std::f64::consts::PI * i as f64 / n as f64;
+        // For a full circle (2π), space evenly without doubling the start/end.
+        // For a partial arc, distribute endpoints across the arc.
+        let a = if n == 1 { 0.0 }
+                else if (arc_rad - 2.0 * std::f64::consts::PI).abs() < 1e-6 {
+                    arc_rad * i as f64 / n as f64
+                } else {
+                    arc_rad * i as f64 / (n - 1).max(1) as f64
+                };
         let h = 0.5 * (if i % 2 == 0 { 1.0 } else { -1.0 });
         let pos = [center[0] + radius * a.cos(), center[1] + h, center[2] + radius * a.sin()];
         let z_dir = { let d = sub3(center, &pos); scale3(1.0 / norm3(&d), &d) };
@@ -285,10 +299,19 @@ fn solve6(a: &Mat6, b: &Vec6) -> Vec6 {
 
 // ── Block-coordinate Newton optimizer ──────────────────────────────
 
+/// One row of the convergence trace.
+#[derive(Clone)]
+struct ConvergenceRow {
+    iter: usize,
+    obj: f64,
+    gnorm: f64,
+}
+
 /// Optimize all camera poses via damped Newton with simultaneous updates.
 /// All per-camera Newton steps are computed at the current poses, then
 /// applied simultaneously (Jacobi-style), avoiding the zig-zag convergence
 /// issue of sequential block-coordinate updates on coupled landmarks.
+/// Returns (optimized poses, convergence history).
 fn optimize_poses(
     initial: &[Pose],
     landmarks: &[Landmark],
@@ -296,11 +319,12 @@ fn optimize_poses(
     use_sp: bool,
     priors: &[PosePrior],
     label: &str,
-) -> Vec<Pose> {
+) -> (Vec<Pose>, Vec<ConvergenceRow>) {
     let mut poses = initial.to_vec();
     let n_cam = poses.len();
     let max_iter = 30;
     let mut lambda = 1e-3;
+    let mut history = Vec::new();
 
     for iter in 0..max_iter {
         let (obj, _) = eval_multicam(&poses, landmarks, sig_zz_inv, use_sp, priors);
@@ -321,6 +345,7 @@ fn optimize_poses(
             deltas.push(delta);
         }
         let gnorm = total_gnorm_sq.sqrt();
+        history.push(ConvergenceRow { iter, obj, gnorm });
 
         if iter % 5 == 0 || gnorm < 1e-7 {
             eprintln!("  [{:>12}] iter {:>2}: obj={:>12.6}  |grad|={:.2e}  λ={:.1e}",
@@ -366,7 +391,7 @@ fn optimize_poses(
         }
     }
     eprintln!();
-    poses
+    (poses, history)
 }
 
 /// Pose error: (rotation_rad, translation_m)
@@ -377,14 +402,161 @@ fn pose_error(a: &Pose, b: &Pose) -> (f64, f64) {
     (rot, tr)
 }
 
+// ── Convergence sweep ────────────────────────────────────────────
+
+/// Run one sweep scenario: returns (convergence_history, final_rot_err, final_trans_err).
+fn run_sweep_scenario(
+    n_cam: usize, n_lm: usize, overlap: f64, arc_deg: f64,
+    pert_scale: f64, seed: u64, use_sp: bool,
+) -> (Vec<ConvergenceRow>, f64, f64) {
+    let sigma_z = 0.01;
+    let sigma_prior = 2.0;
+    let sig_zz_inv = iso2(sigma_z);
+    let sig_xx_inv = iso3(sigma_prior);
+    let fov: f64 = 60.0;
+    let fov_tan = (fov.to_radians() / 2.0).tan();
+
+    let mut rng = Rng::new(seed);
+    let radius = 8.0;
+    let center = [0.0; 3];
+    let arc_rad = arc_deg.to_radians();
+
+    let nominal_poses = if n_cam == 1 {
+        vec![Pose::exp(&[0.0, 0.0, 0.0, 0.0, 0.0, 0.0])]
+    } else {
+        ring_cameras(n_cam, radius, &center, arc_rad)
+    };
+
+    let true_perturbations: Vec<Vec6> = (0..n_cam).map(|_| {
+        [0.05 * rng.n(), 0.05 * rng.n(), 0.05 * rng.n(),
+         0.1 * rng.n(), 0.1 * rng.n(), 0.1 * rng.n()]
+    }).collect();
+
+    let true_poses: Vec<Pose> = nominal_poses.iter().zip(true_perturbations.iter())
+        .map(|(nom, pert)| nom.compose(&Pose::exp(pert)))
+        .collect();
+
+    let landmarks_world: Vec<Vec3> = (0..n_lm).map(|i| {
+        if n_cam == 1 {
+            let depth = 8.0 + 3.0 * (i as f64 / n_lm as f64 - 0.5);
+            [1.5 * (rng.u() - 0.5), 1.5 * (rng.u() - 0.5), depth]
+        } else {
+            [3.0 * (rng.u() - 0.5), 3.0 * (rng.u() - 0.5), 3.0 * (rng.u() - 0.5)]
+        }
+    }).collect();
+
+    let mut landmarks: Vec<Landmark> = Vec::new();
+    for (li, xw) in landmarks_world.iter().enumerate() {
+        let mut obs = Vec::new();
+        for (ci, cam) in true_poses.iter().enumerate() {
+            if !visible(cam, xw, fov_tan) { continue; }
+            let hash_val = ((li * 97 + ci * 31) % 1000) as f64 / 1000.0;
+            if hash_val >= overlap { continue; }
+            let xp = cam.act(xw);
+            let pi = projective::project(&xp);
+            let z = [pi[0] + sigma_z * rng.n(), pi[1] + sigma_z * rng.n()];
+            obs.push((ci, z));
+        }
+        if obs.is_empty() { continue; }
+        let x_prior = [xw[0] + 0.3 * rng.n(), xw[1] + 0.3 * rng.n(), xw[2] + 0.3 * rng.n()];
+        landmarks.push(Landmark { x_prior, sigma_xx_inv: sig_xx_inv, observations: obs });
+    }
+
+    // Initial guesses: perturbed from truth by pert_scale
+    let init_poses: Vec<Pose> = true_poses.iter().map(|tp| {
+        let pert = [pert_scale * rng.n(), pert_scale * rng.n(), pert_scale * rng.n(),
+                    pert_scale * 2.0 * rng.n(), pert_scale * 2.0 * rng.n(), pert_scale * 2.0 * rng.n()];
+        tp.compose(&Pose::exp(&pert))
+    }).collect();
+
+    let priors: Vec<PosePrior> = init_poses.iter().map(|p| PosePrior {
+        pose_ref: *p, sigma_rot: 0.3_f64.max(pert_scale), sigma_trans: 2.0_f64.max(pert_scale * 5.0),
+    }).collect();
+
+    let method = if use_sp { "SP" } else { "Lap" };
+    let label = format!("{}c-{:.0}d-{:.2}-{}", n_cam, arc_deg, pert_scale, method);
+    let (opt_poses, history) = optimize_poses(&init_poses, &landmarks, &sig_zz_inv, use_sp, &priors, &label);
+
+    // Compute mean pose error
+    let (mut total_rot, mut total_trans) = (0.0, 0.0);
+    for i in 0..n_cam {
+        let (r, t) = pose_error(&true_poses[i], &opt_poses[i]);
+        total_rot += r;
+        total_trans += t;
+    }
+    (history, total_rot / n_cam as f64, total_trans / n_cam as f64)
+}
+
+/// Run the full convergence basin sweep and write CSV.
+fn run_sweep() {
+    use std::io::Write;
+
+    let cam_counts = [1, 2, 4, 8];
+    let arc_degs = [90.0, 180.0, 360.0];
+    let pert_scales = [0.01, 0.05, 0.2, 0.5, 1.0];
+    let n_lm = 12;
+    let overlap = 0.8;
+    let n_seeds = 3;
+
+    // Create output directory
+    let out_dir = "experiments/data";
+    std::fs::create_dir_all(out_dir).ok();
+    let out_path = format!("{}/convergence_sweep.csv", out_dir);
+    let mut f = std::fs::File::create(&out_path).expect("Cannot create CSV");
+
+    writeln!(f, "n_cam,arc_deg,pert_scale,method,seed,iter,obj,gnorm,final_rot_err,final_trans_err").unwrap();
+
+    let total = cam_counts.len() * arc_degs.len() * pert_scales.len() * 2 * n_seeds;
+    let mut done = 0;
+
+    for &n_cam in &cam_counts {
+        for &arc_deg in &arc_degs {
+            // Skip arc variations for single camera (meaningless)
+            if n_cam == 1 && arc_deg != 360.0 { continue; }
+
+            for &pert_scale in &pert_scales {
+                for &use_sp in &[false, true] {
+                    let method = if use_sp { "SP" } else { "Laplace" };
+                    for seed_idx in 0..n_seeds {
+                        let seed = 10000 + seed_idx as u64 * 1337;
+                        let (history, rot_err, trans_err) = run_sweep_scenario(
+                            n_cam, n_lm, overlap, arc_deg, pert_scale, seed, use_sp,
+                        );
+                        for row in &history {
+                            writeln!(f, "{},{},{},{},{},{},{:.8e},{:.8e},{:.8e},{:.8e}",
+                                n_cam, arc_deg, pert_scale, method, seed_idx,
+                                row.iter, row.obj, row.gnorm, rot_err, trans_err).unwrap();
+                        }
+                        done += 1;
+                        if done % 10 == 0 {
+                            eprintln!("  sweep: {}/{} scenarios done", done, total);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    eprintln!("Wrote {}", out_path);
+}
+
 // ── Main ───────────────────────────────────────────────────────────
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+
+    // Check for --sweep mode
+    if args.iter().any(|a| a == "--sweep") {
+        run_sweep();
+        return;
+    }
+
     let n_cam: usize = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(1);
     let n_lm: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(12);
     let overlap: f64 = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(1.0);
     let overlap = overlap.clamp(0.1, 1.0);
+    let arc_deg: f64 = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(360.0);
+    let arc_deg = arc_deg.clamp(10.0, 360.0);
+    let arc_rad = arc_deg.to_radians();
 
     let sigma_z = 0.01;
     let sigma_prior = 2.0;
@@ -396,7 +568,7 @@ fn main() {
     println!("═══════════════════════════════════════════════════════════");
     println!("  Pose Inference from Uncertain 3D Point Cloud");
     println!("═══════════════════════════════════════════════════════════\n");
-    println!("  {} camera(s), {} landmarks, {:.0}% overlap", n_cam, n_lm, overlap * 100.0);
+    println!("  {} camera(s), {} landmarks, {:.0}% overlap, {:.0}° arc", n_cam, n_lm, overlap * 100.0, arc_deg);
     println!("  σ_z={}, σ_prior={}, FOV={:.0}°\n", sigma_z, sigma_prior, fov);
 
     let mut rng = Rng::new(12345);
@@ -410,7 +582,7 @@ fn main() {
         // Single camera: looking along +z from -8m
         vec![Pose::exp(&[0.0, 0.0, 0.0, 0.0, 0.0, 0.0])]
     } else {
-        ring_cameras(n_cam, radius, &center)
+        ring_cameras(n_cam, radius, &center, arc_rad)
     };
 
     // Apply small true perturbations to each camera
@@ -504,10 +676,10 @@ fn main() {
     println!("──────────────────────────────────────────────────────────\n");
 
     eprintln!("Optimizing with Laplace objective...");
-    let lap_poses = optimize_poses(&init_poses, &landmarks, &sig_zz_inv, false, &priors, "Laplace");
+    let (lap_poses, _lap_hist) = optimize_poses(&init_poses, &landmarks, &sig_zz_inv, false, &priors, "Laplace");
 
     eprintln!("Optimizing with saddlepoint objective...");
-    let sp_poses = optimize_poses(&init_poses, &landmarks, &sig_zz_inv, true, &priors, "Saddlepoint");
+    let (sp_poses, _sp_hist) = optimize_poses(&init_poses, &landmarks, &sig_zz_inv, true, &priors, "Saddlepoint");
 
     // ── Part 2: Results ──
     println!("──────────────────────────────────────────────────────────");
