@@ -146,8 +146,8 @@ cargo run --release --example multicam_experiment
 
 The original FD-based Q₄ created nested finite-difference interference, preventing the saddlepoint optimizer from converging. The closed-form Q₄ eliminates this:
 
-| Method | Iterations | Final |grad| | Step sizes |
-|--------|-----------|----------------|------------|
+| Method | Iterations | Final ‖∇‖ | Step sizes |
+|--------|-----------|------------|------------|
 | Laplace (before) | 5 | 1e-10 | h_grad=1e-5, h_hess=1e-4 |
 | Saddlepoint (before, FD Q₄) | 60+ | ~2.5 | h_grad=1e-3, h_hess=1e-3 |
 | **Saddlepoint (analytical Q₄)** | **5** | **5e-10** | **h_grad=1e-5, h_hess=1e-4** |
