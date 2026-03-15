@@ -37,6 +37,7 @@ When camera observations are projective (x/z, y/z), the joint posterior over pos
 - A saddlepoint correction with the formula c₁ = (1/12)A + (1/8)B − (1/8)Q₄
 - Two distinct cubic contraction types (cross: 6/15 Isserlis pairings, trace: 9/15)
 - Quartic term with correct negative sign (from exp(−g₄) ≈ 1 − g₄)
+- **Closed-form Q₄**: analytical quartic contraction using only existing projective derivatives (P, H, D3) — no 4th derivatives of π needed (the D4·e term vanishes at the mode)
 - Validity guard: correction applied only when |c₁| < 0.5 (σ_depth/depth ≲ 0.3)
 
 **Verified:** Against numerical quadrature, the saddlepoint achieves 6 significant figures (3.2×10⁻⁶ relative error) compared to Laplace's 0.94% error — a ~3000× improvement.
@@ -74,8 +75,8 @@ RobustPoseEst/
 │   │   ├── se3.rs                     # SE(3): Pose struct, compose/inverse/act/exp/log
 │   │   ├── bch.rs                     # Finite BCH via SU(2) quaternions, phase reflection, Jacobians
 │   │   ├── jacobians.rs               # J_ωr, J_ωl, J_t coupling (analytic T-form), 6×6 SE(3) Jacobian
-│   │   ├── projective.rs              # Pinhole camera, derivatives through 3rd order, third cumulants
-│   │   ├── saddlepoint.rs             # Landmark optimization, saddlepoint correction, validity guard
+│   │   ├── projective.rs              # Pinhole camera, derivatives through 3rd order, third cumulants, analytical Q₄
+│   │   ├── saddlepoint.rs             # Landmark optimization, saddlepoint correction (analytical Q₄), validity guard
 │   │   └── propagation.rs             # First/second-order covariance transport, MC validation
 │   └── examples/
 │       ├── bias_experiment.rs         # Experiment 1: L1 vs L2 coordinate bias (21× ratio)
@@ -95,7 +96,7 @@ See [experiments/README.md](experiments/README.md) for the full plotting guide.
 
 ## Rust Implementation
 
-**88 tests passing, 0 failures, 0 warnings.**
+**95 tests passing, 0 failures, 0 warnings.**
 
 | Module | Tests | Status | Description |
 |--------|-------|--------|-------------|
@@ -103,8 +104,8 @@ See [experiments/README.md](experiments/README.md) for the full plotting guide.
 | `se3` | 8 | ✅ | Pose compose/inverse/act, exp/log roundtrip |
 | `bch` | 30 | ✅ | Finite BCH via SU(2), phase reflection, composition Jacobians |
 | `jacobians` | 13 | ✅ | J_ωr/J_ωl, analytic J_t (T-form), 6×6 SE(3) Jacobian (FD-verified) |
-| `projective` | 11 | ✅ | Project, Jacobian, Hessian, 3rd derivs, third cumulants (all FD-verified) |
-| `saddlepoint` | 7 | ✅ | Landmark GN optimizer, corrected c₁ formula, validity guard, Q₄ by FD |
+| `projective` | 14 | ✅ | Project, Jacobian, Hessian, 3rd/4th derivs, third cumulants, analytical Q₄ (all FD-verified) |
+| `saddlepoint` | 10 | ✅ | Landmark GN optimizer, corrected c₁ formula, validity guard, analytical Q₄, multi-cam |
 | `propagation` | 10 | ✅ | First/second-order covariance transport, Levi-Civita, Isserlis correction, MC validation |
 
 ### Key verified identities (Rust + Mathematica + Python)
@@ -115,8 +116,9 @@ See [experiments/README.md](experiments/README.md) for the full plotting guide.
 - S⁻¹R = J_ωr verified symbolically and numerically
 - Full 6×6 SE(3) Jacobian block structure [[J_ωr, 0], [J_t, J_ωr]] verified to 10⁻⁹
 - **Coupling Jacobian J_t**: analytic T-form verified to 7.3×10⁻¹⁰ against FD; symbolic equivalence proven in Mathematica (9/9 substitutions)
-- Projective derivatives through 3rd order verified against FD
+- Projective derivatives through 4th order verified against FD
 - Saddlepoint correction matches numerical quadrature to 6 significant figures
+- Analytical Q₄ (quartic contraction) verified against FD of exact Hessian
 
 ### Design Principles
 
@@ -292,7 +294,7 @@ checklist in [experiments/README.md §4](experiments/README.md).
 | Experimental findings | High | Our paper must be based on repeatable experiments |
 | More examples | Medium | An example script for pose and 3D landmark inference |
 | Verify Solà notation | Medium | Mathematica scripts to confirm notation mappings |
-| Closed-form Q₄ | Low | Replace FD-based quartic contraction with analytic fourth derivatives of projective model |
+| Depth soft mode analysis | Medium | Investigate multi-camera or prior-based approaches to resolve the translation degeneracy |
 
 ### Resolved Items
 
@@ -305,6 +307,8 @@ checklist in [experiments/README.md §4](experiments/README.md).
 | Erratum eq 78 | ✅ Second equality was wrong: RHS is β, not α. Corrected in paper |
 | Saddlepoint correction formula | ✅ Corrected to c₁ = (1/12)A + (1/8)B − (1/8)Q₄, verified against quadrature |
 | SE(3) Jacobian FD test | ✅ Was `#[ignore]`, now passing (bug was in original j_coupling, not the formula) |
+| Closed-form Q₄ | ✅ Analytical quartic contraction using P, H, D3 — no 4th derivatives of π needed. Eliminates nested FD; SP optimizer converges in 5 iterations (was 60+). Verified against FD of exact Hessian |
+| Pose inference panics | ✅ Fixed NaN/degenerate configurations, added pose prior for depth regularization |
 
 ## Notation Correspondence with Solà et al. / Barfoot
 
@@ -360,6 +364,55 @@ All 6×6 matrices are related by the block permutation P = [[0, I₃]; [I₃, 0]
 - Individual corrections up to c₁ ≈ 9×10⁻³
 - Cumulative correction: Σ|Δ| = 4.4×10⁻²
 - Correction dominated by negative Q₄ term (depth non-Gaussianity)
+
+## Pose Inference: Analytical Q₄ and the Depth Soft Mode
+
+### The nested finite-difference problem
+
+The original saddlepoint implementation computed Q₄ via finite differences (FD) of the Hessian. This created a nested FD problem: the outer pose optimizer also uses FD for its gradient and Hessian. The inner FD at h=1e-5 forced the outer FD to use h=1e-3 to avoid interference, producing noisy gradients that prevented quadratic convergence:
+
+| Method | Iterations | Final |grad| | Step sizes |
+|--------|-----------|----------------|------------|
+| Laplace (before) | 5 | 1e-10 | h_grad=1e-5, h_hess=1e-4 |
+| Saddlepoint (before, FD Q₄) | 60+ | ~2.5 | h_grad=1e-3, h_hess=1e-3 |
+| **Saddlepoint (analytical Q₄)** | **5** | **5e-10** | **h_grad=1e-5, h_hess=1e-4** |
+
+### The analytical formula
+
+At the mode (residual e ≈ 0), the 4th derivative of the NLL has a clean closed form:
+
+```
+f''''_{abcd} = Σ_{mn} Σ⁻¹_{mn} × [
+  P_{ma}·D3ⁿ_{bcd} + P_{mb}·D3ⁿ_{acd} + P_{mc}·D3ⁿ_{abd} + P_{md}·D3ⁿ_{abc}
+  + H^m_{ab}·Hⁿ_{cd} + H^m_{ac}·Hⁿ_{bd} + H^m_{ad}·Hⁿ_{bc}
+]
+```
+
+where P = project_jacobian, H = project_hessian, D3 = project_third_deriv. The D4·e term vanishes at the mode (same reason the D3·e term vanishes for third cumulants). The prior contributes zero (quadratic → zero 4th derivative). The contraction Q₄ = Σ f4_{abcd} · S_{ab} · S_{cd} is computed in camera frame where S = R·H⁻¹·Rᵀ.
+
+### The depth soft mode conclusion
+
+With analytical Q₄, the saddlepoint optimizer converges identically to Laplace (5 iterations, |grad|→1e-10). The results reveal a fundamental limitation:
+
+```
+                           True      Laplace  Saddlepoint
+  t₃ (depth)          0.000000     6.451333     6.366716
+
+  Translation error:
+    Laplace:      6.454793 m
+    Saddlepoint:  6.370215 m
+    Difference:   0.084597 m
+```
+
+The saddlepoint correction shifts the estimate by only ~8.5cm on a ~6.4m error. The per-landmark corrections c₁ ≈ 2% are mathematically correct — they capture the non-Gaussian skewness of each landmark marginal — but they cannot resolve the **depth soft mode**, which is a geometric degeneracy: with a single camera, the projection π(x) = [x/z, y/z] is nearly invariant under joint camera-landmark depth rescaling.
+
+**This is an information-theoretic limitation, not an approximation artifact.** The saddlepoint correctly refines the *shape* of each landmark's marginal, but no per-landmark correction can create depth information that isn't present in the observations. Resolving the depth soft mode requires:
+
+- **Multi-camera / stereo baselines** — parallax provides direct depth triangulation
+- **Strong pose priors** — constrain the translation subspace directly
+- **Known-scale constraints** — e.g., known inter-landmark distances or IMU-derived scale
+
+The multi-camera experiments (Experiments 3–4) confirm this: with 4+ cameras on a ring, depth is well-constrained and both Laplace and saddlepoint give accurate results, with the SP correction properly accounting for residual non-Gaussianity.
 
 ## Mathematica Verification Scripts
 
