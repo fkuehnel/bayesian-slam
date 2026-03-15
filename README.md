@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/hero.png" alt="SU(2), SO(3), and SE(3) geometry with uncertainty propagation" width="1000">
+</p>
+
 # Higher-Order Uncertainty Propagation and Saddlepoint Marginalization on SE(3)
 
 [![Rust Tests](https://github.com/fkuehnel/bayesian-slam/actions/workflows/rust-tests.yml/badge.svg)](https://github.com/fkuehnel/bayesian-slam/actions/workflows/rust-tests.yml)
