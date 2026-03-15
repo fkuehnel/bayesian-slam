@@ -62,12 +62,19 @@ fn fd_gradient(
     use_sp: bool,
 ) -> Vec6 {
     let h = 1e-5;
+    let (f0, _) = eval(pose, obs, sig_zz_inv, use_sp);
     std::array::from_fn(|j| {
         let mut ep = [0.0; 6]; ep[j] = h;
         let mut em = [0.0; 6]; em[j] = -h;
         let (vp, _) = eval(&pose.compose(&Pose::exp(&ep)), obs, sig_zz_inv, use_sp);
         let (vm, _) = eval(&pose.compose(&Pose::exp(&em)), obs, sig_zz_inv, use_sp);
-        (vp - vm) / (2.0 * h)
+        // Fall back to one-sided differences when central difference hits a singularity
+        match (vp.is_finite(), vm.is_finite()) {
+            (true, true) => (vp - vm) / (2.0 * h),
+            (true, false) => (vp - f0) / h,
+            (false, true) => (f0 - vm) / h,
+            (false, false) => 0.0,
+        }
     })
 }
 
@@ -82,7 +89,7 @@ fn fd_hessian(
     let (f0, _) = eval(pose, obs, sig_zz_inv, use_sp);
     let mut hess = [[0.0f64; 6]; 6];
 
-    // Cache f(x ± h*ei)
+    // Cache f(x ± h*ei), using one-sided FD when a direction hits a singularity
     let mut fp = [0.0f64; 6];
     let mut fm = [0.0f64; 6];
     for i in 0..6 {
@@ -90,10 +97,14 @@ fn fd_hessian(
         (fp[i], _) = eval(&pose.compose(&Pose::exp(&ei)), obs, sig_zz_inv, use_sp);
         ei[i] = -h;
         (fm[i], _) = eval(&pose.compose(&Pose::exp(&ei)), obs, sig_zz_inv, use_sp);
-        hess[i][i] = (fp[i] - 2.0 * f0 + fm[i]) / (h * h);
+        let fpi = if fp[i].is_finite() { fp[i] } else { f0 };
+        let fmi = if fm[i].is_finite() { fm[i] } else { f0 };
+        fp[i] = fpi;
+        fm[i] = fmi;
+        hess[i][i] = (fpi - 2.0 * f0 + fmi) / (h * h);
     }
 
-    // Off-diagonal
+    // Off-diagonal — skip if any of the 4 corners are non-finite
     for i in 0..6 { for j in (i+1)..6 {
         let mut epp = [0.0;6]; epp[i] = h; epp[j] = h;
         let mut epm = [0.0;6]; epm[i] = h; epm[j] = -h;
@@ -103,7 +114,11 @@ fn fd_hessian(
         let (fpm, _) = eval(&pose.compose(&Pose::exp(&epm)), obs, sig_zz_inv, use_sp);
         let (fmp, _) = eval(&pose.compose(&Pose::exp(&emp)), obs, sig_zz_inv, use_sp);
         let (fmm, _) = eval(&pose.compose(&Pose::exp(&emm)), obs, sig_zz_inv, use_sp);
-        let v = (fpp - fpm - fmp + fmm) / (4.0 * h * h);
+        let v = if fpp.is_finite() && fpm.is_finite() && fmp.is_finite() && fmm.is_finite() {
+            (fpp - fpm - fmp + fmm) / (4.0 * h * h)
+        } else {
+            0.0  // treat as uncoupled when we can't compute the cross-derivative
+        };
         hess[i][j] = v;
         hess[j][i] = v;
     }}
@@ -171,15 +186,37 @@ fn optimize_pose(
         let neg_grad: Vec6 = std::array::from_fn(|i| -grad[i]);
         let delta = solve6(&hess, &neg_grad);
 
-        // Try the step
+        // Try the step — skip if delta is non-finite
+        let step_ok = delta.iter().all(|d| d.is_finite());
         let candidate = pose.compose(&Pose::exp(&delta));
-        let (new_obj, _) = eval(&candidate, obs, sig_zz_inv, use_sp);
+        let (new_obj, _) = if step_ok {
+            eval(&candidate, obs, sig_zz_inv, use_sp)
+        } else {
+            (f64::INFINITY, eval(&pose, obs, sig_zz_inv, use_sp).1)
+        };
 
-        if new_obj < obj {
+        if new_obj.is_finite() && new_obj < obj {
             pose = candidate;
             lambda = (lambda * 0.3).max(1e-8);
         } else {
             lambda = (lambda * 5.0).min(1e4);
+            // When LM is stuck at max damping, try a small gradient descent step
+            // with backtracking line search
+            if lambda >= 1e4 {
+                let mut alpha = 1e-3 / gnorm;
+                for _ in 0..10 {
+                    let gd_step: Vec6 = std::array::from_fn(|i| -alpha * grad[i]);
+                    if !gd_step.iter().all(|d| d.is_finite()) { break; }
+                    let gd_candidate = pose.compose(&Pose::exp(&gd_step));
+                    let (gd_obj, _) = eval(&gd_candidate, obs, sig_zz_inv, use_sp);
+                    if gd_obj.is_finite() && gd_obj < obj {
+                        pose = gd_candidate;
+                        lambda = 1e-1; // reset damping
+                        break;
+                    }
+                    alpha *= 0.5;
+                }
+            }
         }
     }
     eprintln!();
