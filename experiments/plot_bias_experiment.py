@@ -3,22 +3,33 @@
 Scatter plots for Experiment 1: L1 vs L2 coordinate bias.
 
 Reads the CSV produced by `cargo run --release --example bias_experiment`
-and generates scatter plots comparing first-kind (exponential) and
-second-kind (additive) coordinate errors.
+and generates two compact figures (translation, rotation), each showing
+the 2D projection that maximises visible L2 bias. L1 (exponential) on
+the left, L2 (additive) on the right — matching the paper's Fig 1–2
+format.
 
 Outputs PGF files for direct inclusion in LaTeX documents (text is
 rendered by LaTeX using your document fonts) as well as PNG previews.
 
 Usage (from repo root):
-    python experiments/plot_bias_experiment.py [path/to/bias_experiment.csv]
+    python experiments/plot_bias_experiment.py [path/to/data.csv]
+    python experiments/plot_bias_experiment.py --all [path/to/data.csv]
 
 Default CSV path: experiments/data/bias_experiment.csv
-Output:           paper/figures/bias_scatter_translation.{pgf,png}
-                  paper/figures/bias_scatter_rotation.{pgf,png}
+
+Without --all (default):
+    paper/figures/bias_scatter_translation.{pgf,png}   (1×2, best projection)
+    paper/figures/bias_scatter_rotation.{pgf,png}       (1×2, best projection)
+
+With --all:
+    Also produces the full 2×3 grids (all axis pairs):
+    paper/figures/bias_scatter_translation_all.{pgf,png}
+    paper/figures/bias_scatter_rotation_all.{pgf,png}
 """
 
 import sys
 import os
+import argparse
 import numpy as np
 
 import matplotlib
@@ -44,6 +55,9 @@ matplotlib.rcParams.update({
     "ytick.labelsize": 8,
 })
 
+IEEE_COL = 3.5   # inches, single-column
+IEEE_DBL = 7.16  # inches, double-column
+
 
 def load_csv(path):
     """Load bias_experiment.csv, return dict of arrays."""
@@ -56,51 +70,133 @@ def load_csv(path):
     }
 
 
-def scatter_pair(ax_l1, ax_l2, l1, l2, comp_x, comp_y, labels, title_prefix):
-    """Draw matching scatter plots for L1 and L2 on two axes."""
-    alpha = max(0.05, min(0.4, 200.0 / len(l1)))
+def pick_max_bias_axes(l2_data):
+    """Return (comp_x, comp_y) — the two component indices whose L2
+    mean has the largest absolute values, so the 2D projection shows
+    the most visible bias offset."""
+    mean = np.abs(l2_data.mean(axis=0))
+    # Pick the two components with largest absolute mean
+    ranked = np.argsort(mean)[::-1]
+    cx, cy = sorted(ranked[:2])  # keep consistent axis ordering
+    return cx, cy
 
-    ax_l1.scatter(l1[:, comp_x], l1[:, comp_y], s=4, alpha=alpha, color="steelblue", rasterized=True)
-    ax_l2.scatter(l2[:, comp_x], l2[:, comp_y], s=4, alpha=alpha, color="firebrick", rasterized=True)
 
-    # Mean markers
-    l1_mean = l1.mean(axis=0)
-    l2_mean = l2.mean(axis=0)
-    ax_l1.scatter(l1_mean[comp_x], l1_mean[comp_y], s=80, marker="+", color="black", linewidths=2, zorder=5)
-    ax_l2.scatter(l2_mean[comp_x], l2_mean[comp_y], s=80, marker="+", color="black", linewidths=2, zorder=5)
+def scatter_panel(ax, data, comp_x, comp_y, labels, color, title, bias_norm):
+    """Draw a single scatter panel."""
+    alpha = max(0.05, min(0.4, 200.0 / len(data)))
+
+    ax.scatter(data[:, comp_x], data[:, comp_y],
+               s=4, alpha=alpha, color=color, rasterized=True)
+
+    # Mean marker
+    mean = data.mean(axis=0)
+    ax.scatter(mean[comp_x], mean[comp_y],
+               s=80, marker="+", color="black", linewidths=2, zorder=5)
 
     # Origin crosshair
-    for ax in (ax_l1, ax_l2):
-        ax.axhline(0, color="gray", linewidth=0.5, linestyle="--")
-        ax.axvline(0, color="gray", linewidth=0.5, linestyle="--")
+    ax.axhline(0, color="gray", linewidth=0.5, linestyle="--")
+    ax.axvline(0, color="gray", linewidth=0.5, linestyle="--")
 
-    ax_l1.set_xlabel(labels[comp_x])
-    ax_l1.set_ylabel(labels[comp_y])
-    ax_l2.set_xlabel(labels[comp_x])
-    ax_l2.set_ylabel(labels[comp_y])
+    ax.set_xlabel(labels[comp_x])
+    ax.set_ylabel(labels[comp_y])
+    ax.set_title(rf"{title}" "\n" rf"$\|\mathrm{{bias}}\| = {bias_norm:.4f}$")
 
-    l1_bias = np.linalg.norm(l1_mean)
-    l2_bias = np.linalg.norm(l2_mean)
-    ax_l1.set_title(rf"{title_prefix} --- L1 (exp)" "\n" rf"$\|\mathrm{{bias}}\| = {l1_bias:.4f}$")
-    ax_l2.set_title(rf"{title_prefix} --- L2 (additive)" "\n" rf"$\|\mathrm{{bias}}\| = {l2_bias:.4f}$")
 
-    # Use same axis limits for fair comparison
-    all_vals = np.concatenate([l1[:, [comp_x, comp_y]], l2[:, [comp_x, comp_y]]])
-    margin = 0.05
-    for c in range(2):
-        lo, hi = np.percentile(all_vals[:, c], [1, 99])
-        pad = (hi - lo) * margin
-        lo, hi = lo - pad, hi + pad
-        if c == 0:
-            ax_l1.set_xlim(lo, hi)
-            ax_l2.set_xlim(lo, hi)
-        else:
-            ax_l1.set_ylim(lo, hi)
-            ax_l2.set_ylim(lo, hi)
+def make_figure(l1, l2, labels, name, fig_name):
+    """Create a 1×2 figure (L1 left, L2 right) for the best projection."""
+    os.makedirs(FIG_DIR, exist_ok=True)
+
+    cx, cy = pick_max_bias_axes(l2)
+    n = len(l1)
+
+    l1_bias = np.linalg.norm(l1.mean(axis=0))
+    l2_bias = np.linalg.norm(l2.mean(axis=0))
+
+    fig, (ax_l1, ax_l2) = plt.subplots(1, 2, figsize=(IEEE_DBL, 3.0))
+
+    scatter_panel(ax_l1, l1, cx, cy, labels,
+                  color="steelblue",
+                  title=rf"{name} --- L1 (exp)",
+                  bias_norm=l1_bias)
+    scatter_panel(ax_l2, l2, cx, cy, labels,
+                  color="firebrick",
+                  title=rf"{name} --- L2 (additive)",
+                  bias_norm=l2_bias)
+
+    # Matched axis limits for fair comparison
+    all_vals = np.concatenate([l1[:, [cx, cy]], l2[:, [cx, cy]]])
+    for i, setter_l1, setter_l2 in [
+        (0, ax_l1.set_xlim, ax_l2.set_xlim),
+        (1, ax_l1.set_ylim, ax_l2.set_ylim),
+    ]:
+        lo, hi = np.percentile(all_vals[:, i], [1, 99])
+        pad = (hi - lo) * 0.05
+        setter_l1(lo - pad, hi + pad)
+        setter_l2(lo - pad, hi + pad)
+
+    fig.tight_layout()
+    for ext in ("pgf", "png"):
+        path = os.path.join(FIG_DIR, f"{fig_name}.{ext}")
+        fig.savefig(path, dpi=150)
+        print(f"Saved {path}")
+    plt.close(fig)
+
+
+def make_figure_all(l1, l2, labels, name, fig_name):
+    """Create a 2×3 figure showing all axis pairs. Top row = L1, bottom = L2."""
+    os.makedirs(FIG_DIR, exist_ok=True)
+
+    pairs = [(0, 1), (0, 2), (1, 2)]
+    l1_bias = np.linalg.norm(l1.mean(axis=0))
+    l2_bias = np.linalg.norm(l2.mean(axis=0))
+
+    fig, axes = plt.subplots(2, 3, figsize=(15, 9))
+
+    for col, (cx, cy) in enumerate(pairs):
+        scatter_panel(axes[0, col], l1, cx, cy, labels,
+                      color="steelblue",
+                      title=rf"{name} --- L1 (exp)",
+                      bias_norm=l1_bias)
+        scatter_panel(axes[1, col], l2, cx, cy, labels,
+                      color="firebrick",
+                      title=rf"{name} --- L2 (additive)",
+                      bias_norm=l2_bias)
+
+        # Matched axis limits per column
+        all_vals = np.concatenate([l1[:, [cx, cy]], l2[:, [cx, cy]]])
+        for i, row in enumerate([0, 1]):
+            for j, setter in enumerate([
+                lambda lo, hi, r=row: axes[r, col].set_xlim(lo, hi),
+                lambda lo, hi, r=row: axes[r, col].set_ylim(lo, hi),
+            ]):
+                lo, hi = np.percentile(all_vals[:, j], [1, 99])
+                pad = (hi - lo) * 0.05
+                setter(lo - pad, hi + pad)
+
+    n = len(l1)
+    fig.suptitle(
+        rf"Experiment 1: {name} Error Scatter \quad ($n={n}$)" "\n"
+        r"L1 = first-kind (exponential) $\mid$ L2 = second-kind (additive)",
+        fontsize=13, fontweight="bold",
+    )
+    fig.tight_layout(rect=[0, 0, 1, 0.92])
+    for ext in ("pgf", "png"):
+        path = os.path.join(FIG_DIR, f"{fig_name}_all.{ext}")
+        fig.savefig(path, dpi=150)
+        print(f"Saved {path}")
+    plt.close(fig)
 
 
 def main():
-    csv_path = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_CSV
+    parser = argparse.ArgumentParser(
+        description="Bias scatter plots for Experiment 1.")
+    parser.add_argument("csv", nargs="?", default=DEFAULT_CSV,
+                        help="Path to bias_experiment.csv")
+    parser.add_argument("--all", action="store_true",
+                        help="Also produce 2×3 grids with all axis pairs")
+    args = parser.parse_args()
+
+    csv_path = args.csv
     if not os.path.isfile(csv_path):
         print(f"Error: CSV not found at {csv_path}")
         print("Run the Rust experiment first (from repo root):")
@@ -108,60 +204,39 @@ def main():
         print(f"Then ensure CSV is at: {DEFAULT_CSV}")
         sys.exit(1)
 
-    os.makedirs(FIG_DIR, exist_ok=True)
-
     d = load_csv(csv_path)
     n = len(d["l1_t"])
     print(f"Loaded {n} samples from {csv_path}")
 
-    # ── Figure 1: Translation scatter (the main result, shows 21× bias) ──
-    fig, axes = plt.subplots(2, 3, figsize=(15, 9))
     trans_labels = [r"$\delta t_1$", r"$\delta t_2$", r"$\delta t_3$"]
-    pairs = [(0, 1), (0, 2), (1, 2)]
-    for col, (cx, cy) in enumerate(pairs):
-        scatter_pair(axes[0, col], axes[1, col],
-                     d["l1_t"], d["l2_t"], cx, cy,
-                     trans_labels, "Translation")
+    rot_labels   = [r"$\delta\omega_1$", r"$\delta\omega_2$", r"$\delta\omega_3$"]
 
-    fig.suptitle(
-        rf"Experiment 1: Translation Error Scatter \quad ($n={n}$)" "\n"
-        r"L1 = first-kind (exponential) $\mid$ L2 = second-kind (additive)",
-        fontsize=13, fontweight="bold",
-    )
-    fig.tight_layout(rect=[0, 0, 1, 0.92])
-    for ext in ("pgf", "png"):
-        path1 = os.path.join(FIG_DIR, f"bias_scatter_translation.{ext}")
-        fig.savefig(path1, dpi=150)
-        print(f"Saved {path1}")
-    plt.close(fig)
+    # Always produce the compact 1×2 figures
+    make_figure(d["l1_t"], d["l2_t"], trans_labels,
+                "Translation", "bias_scatter_translation")
+    make_figure(d["l1_omega"], d["l2_omega"], rot_labels,
+                "Rotation", "bias_scatter_rotation")
 
-    # ── Figure 2: Rotation scatter ──
-    fig, axes = plt.subplots(2, 3, figsize=(15, 9))
-    rot_labels = [r"$\delta\omega_1$", r"$\delta\omega_2$", r"$\delta\omega_3$"]
-    for col, (cx, cy) in enumerate(pairs):
-        scatter_pair(axes[0, col], axes[1, col],
-                     d["l1_omega"], d["l2_omega"], cx, cy,
-                     rot_labels, "Rotation")
+    # Optionally produce the full 2×3 grids
+    if args.all:
+        make_figure_all(d["l1_t"], d["l2_t"], trans_labels,
+                        "Translation", "bias_scatter_translation")
+        make_figure_all(d["l1_omega"], d["l2_omega"], rot_labels,
+                        "Rotation", "bias_scatter_rotation")
 
-    fig.suptitle(
-        rf"Experiment 1: Rotation Error Scatter \quad ($n={n}$)" "\n"
-        r"L1 = first-kind (exponential) $\mid$ L2 = second-kind (additive)",
-        fontsize=13, fontweight="bold",
-    )
-    fig.tight_layout(rect=[0, 0, 1, 0.92])
-    for ext in ("pgf", "png"):
-        path2 = os.path.join(FIG_DIR, f"bias_scatter_rotation.{ext}")
-        fig.savefig(path2, dpi=150)
-        print(f"Saved {path2}")
-    plt.close(fig)
-
-    # ── Print summary statistics ──
+    # ── Summary statistics ──
     l1_t_bias = np.linalg.norm(d["l1_t"].mean(axis=0))
     l2_t_bias = np.linalg.norm(d["l2_t"].mean(axis=0))
     l1_r_bias = np.linalg.norm(d["l1_omega"].mean(axis=0))
     l2_r_bias = np.linalg.norm(d["l2_omega"].mean(axis=0))
     print(f"\nTranslation bias — L1: {l1_t_bias:.6f}  L2: {l2_t_bias:.6f}  ratio: {l2_t_bias/max(l1_t_bias,1e-15):.1f}x")
     print(f"Rotation bias    — L1: {l1_r_bias:.6f}  L2: {l2_r_bias:.6f}  ratio: {l2_r_bias/max(l1_r_bias,1e-15):.1f}x")
+
+    # Report which axes were selected
+    cx_t, cy_t = pick_max_bias_axes(d["l2_t"])
+    cx_r, cy_r = pick_max_bias_axes(d["l2_omega"])
+    print(f"\nSelected translation axes: components {cx_t},{cy_t}")
+    print(f"Selected rotation axes:    components {cx_r},{cy_r}")
 
 
 if __name__ == "__main__":

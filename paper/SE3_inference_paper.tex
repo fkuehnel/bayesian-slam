@@ -2,10 +2,12 @@
 \usepackage{cite}
 \usepackage{amsmath,amssymb,amsthm}
 \usepackage{pgf}
+\usepackage{import}
 \usepackage{graphicx}
 \usepackage{epstopdf}
 \usepackage{bm}
 
+\def\mathdefault#1{#1}
 
 \newcommand{\getname}[1]{eps/#1.eps}
 
@@ -725,9 +727,9 @@ $(\sigma_{\rm depth}/x_3')^2$.
 \section{Numerical Experiments}
 \label{sec:experiments}
 %% ====================================================================
-
+ 
 \subsection{Experiment 1: Bias in Parametrization}
-
+ 
 We verify Proposition~\ref{prop:bias} using a 
 3D point cloud localization scenario. $N = 3$ landmarks are
 randomly distributed in the cube $[-1,1]^3$ around the origin.
@@ -738,55 +740,68 @@ variance $\sigma = 1.0$, then solve the localization
 problem~\eqref{eq:localization} using Horn's quaternion 
 method~\cite{Horn87} for each noise realization.
 The resulting sample distribution of estimated camera poses 
-is plotted in two coordinate systems.
-
-\begin{figure}[t]
+is plotted in both coordinate systems, with the 2D projection
+chosen to maximize the visible bias.
+ 
+\begin{figure*}[t]
     \centering
-    \includegraphics[width=4.2cm]{\getname{SE3addomega}}
-    \includegraphics[width=4.2cm]{\getname{SE3addT}}
-    \caption{Projected sample distribution in second-kind coordinates:
-    rotational components $\Delta\bfOmega = \bfOmega - \bfOmega_{f_0}$ (left)
-    and translational coordinates $\Delta\mathbf{T} = \mathbf{T} - \mathbf{T}_{f_0}$ (right).
-    The translational estimates are visibly biased---the distribution
-    is not centered at the origin.}
-    \label{fig:addanalysis}
-\end{figure}
-
-\begin{figure}[t]
+    \import{figures/}{bias_scatter_translation.pgf}
+    \caption{Translation error scatter for $n=1629$ noise
+    realizations, projected onto the $(\delta t_2, \delta t_3)$
+    plane (the axis pair maximizing visible L2 bias).
+    Left: first-kind (exponential) coordinates
+    $[\bfOmega,\mathbf{t}]_{L_1}$ with
+    $\|\mathrm{bias}\|=0.053$.
+    Right: second-kind (additive) coordinates
+    $[\bfOmega,\mathbf{T}]_{L_2}$ with
+    $\|\mathrm{bias}\|=0.632$.
+    The $11.8\times$ bias ratio confirms the mechanism of
+    Proposition~\ref{prop:bias}: the nonlinear coupling
+    $\mathbf{T}=\mathsf{S}(\bfOmega)\mathbf{t}$ shifts the
+    L2 mean away from the origin even though the L1
+    distribution is centered.}
+    \label{fig:bias_translation}
+\end{figure*}
+ 
+\begin{figure*}[t]
     \centering
-    \includegraphics[width=4.2cm]{\getname{SE3compomega}}
-    \includegraphics[width=4.2cm]{\getname{SE3compt}}
-    \caption{The same sample distribution as in Fig.~\ref{fig:addanalysis},
-    now plotted in $SE(3)$ exponential coordinates (Lie-Cartan first kind),
-    given by $\ln(f_0^{-1} \cdot f) = [\Delta\tilde{\bfOmega}, \mathbf{t}]$.
-    The distribution is centered around the origin and exhibits
-    approximately Gaussian behavior, confirming Proposition~\ref{prop:bias}.}
-    \label{fig:companalysis}
-\end{figure}
-
-Fig.~\ref{fig:addanalysis} shows the sample distribution in 
-second-kind coordinates $[\bfOmega, \mathbf{T}]_{L_2}$. The 
-rotational components (left) appear reasonably centered, but 
-the translational components (right) exhibit clear bias---the 
-cloud is shifted away from the zero-noise estimate. This is 
-the bias mechanism of Proposition~\ref{prop:bias}: the nonlinear 
-coupling $\mathbf{T} = \mathsf{S}(\bfOmega)\mathbf{t}$ 
-together with nonvanishing cross-correlations 
-$\langle \Omega_\alpha t_\beta \rangle \neq 0$ produces a 
-nonzero mean for $\mathbf{T}$ even when $[\bfOmega, \mathbf{t}]$ 
-is unbiased.
-
-Fig.~\ref{fig:companalysis} shows the identical sample set 
-plotted in exponential coordinates $[\bfOmega, \mathbf{t}]_{L_1}$.
-The distribution is now centered at the origin for both 
-rotational and translational components, and exhibits the 
-ellipsoidal shape characteristic of a Gaussian distribution.
-This empirically validates the choice of Lie-Cartan first-kind 
-coordinates for unbiased parametric uncertainty 
-representation~\eqref{eq:gaussianSE3}.
+    \import{figures/}{bias_scatter_rotation.pgf}
+    \caption{Rotation error scatter ($n=1629$), projected onto
+    $(\delta\omega_1, \delta\omega_3)$.
+    Left: L1 (exp), $\|\mathrm{bias}\|=0.022$.
+    Right: L2 (additive), $\|\mathrm{bias}\|=0.030$.
+    The bias ratio is only $1.4\times$, consistent with
+    the fact that the $SO(3)$ subgroup carries no
+    semi-direct product coupling---the small residual bias
+    in both parametrizations is a finite-sample artifact.}
+    \label{fig:bias_rotation}
+\end{figure*}
+ 
+Fig.~\ref{fig:bias_translation} shows the translation
+components where the bias effect is strongest.
+In exponential coordinates (left panel) the sample cloud
+is centered at the origin with $\|\mathrm{bias}\|=0.053$,
+while in second-kind coordinates (right panel) the mean
+is visibly displaced with $\|\mathrm{bias}\|=0.632$---an
+$11.8\times$ increase. This is precisely the mechanism of
+Proposition~\ref{prop:bias}: the nonlinear coupling
+$\mathbf{T}=\mathsf{S}(\bfOmega)\mathbf{t}$ together
+with nonvanishing cross-correlations
+$\langle\Omega_\alpha t_\beta\rangle\neq 0$ produces a
+nonzero translational mean even when the exponential
+coordinates are unbiased.
+ 
+Fig.~\ref{fig:bias_rotation} shows the rotational components
+for comparison. Here both parametrizations yield nearly
+centered distributions ($1.4\times$ ratio), confirming that
+the bias originates in the rotation--translation coupling
+of the semi-direct product, not in the $SO(3)$ factor itself.
+The exponential-coordinate distribution exhibits the
+ellipsoidal shape characteristic of a Gaussian, validating
+the uncertainty model~\eqref{eq:gaussianSE3}.
 
 \subsection{Experiment 2: Second-Order Propagation Accuracy}
-
+ 
 We validate the second-order mean and covariance corrections
 (Theorems~\ref{thm:meanshift} and~\ref{thm:covcorrection})
 against Monte Carlo ground truth.
@@ -800,7 +815,7 @@ $\bfOmega_c = \bfOmega_a + \bfOmega_b
 We use $10^5$ samples and covariances with
 $\sigma_\omega \approx 0.2$~rad, representative of
 moderate rotational uncertainty.
-
+ 
 \paragraph{Mean correction.}
 The analytic second-order mean shift (Theorem~\ref{thm:meanshift})
 predicts a correction
@@ -815,7 +830,7 @@ the formula; the residual ($7.4\times 10^{-4}$~rad)
 is consistent with the $\mathcal{O}(\sigma^3)$ truncation
 of the BCH series (cf.\ Table~\ref{tab:bchorder}
 at $s \approx 0.2$).
-
+ 
 \paragraph{Covariance correction.}
 The Isserlis-based formula~\eqref{eq:covcorrection_explicit}
 yields a symmetric correction matrix
@@ -824,7 +839,7 @@ of order $10^{-3}$.
 Table~\ref{tab:covmc} compares the first-order and
 corrected covariances against the Monte Carlo reference
 in terms of the Frobenius norm of the error.
-
+ 
 \begin{table}[t]
 \centering
 \caption{Covariance propagation accuracy for the rotational
@@ -841,7 +856,7 @@ Second-order~\eqref{eq:covcorrection_explicit} & $1.20 \times 10^{-3}$ \\
 Improvement factor & $1.83\times$
 \end{tabular}
 \end{table}
-
+ 
 The second-order correction reduces the covariance error
 by a factor of~$1.83$.
 While the absolute improvement is modest at this noise level---the
@@ -864,15 +879,15 @@ covariance blocks that are already available
 in the filter state---it is a closed-form formula,
 not a sampling procedure.
 \end{enumerate}
-
+ 
 \subsection{Experiment 3: Marginalized MAP vs.\ Bundle Adjustment}
-
+ 
 We test the marginalized MAP algorithm on natural terrain 
 stereo image pairs. Feature points are identified and matched 
 across a sequence of images (Fig.~\ref{fig:matchedpoints}).
 Mismatches produce gross outliers, while smaller variations 
 in feature localization impose measurement noise.
-
+ 
 \begin{figure}[t]
     \centering
     \includegraphics[width=7cm]{\getname{realimage}}
@@ -882,7 +897,7 @@ in feature localization impose measurement noise.
     localization variation imposes measurement noise.}
     \label{fig:matchedpoints}
 \end{figure}
-
+ 
 \begin{figure}[t]
     \centering
     \includegraphics[width=4.2cm]{\getname{costplot1}}
@@ -896,7 +911,7 @@ in feature localization impose measurement noise.
     fails to converge.}
     \label{fig:performance}
 \end{figure}
-
+ 
 Fig.~\ref{fig:performance} compares the convergence behavior.
 Both methods converge within approximately 10 iterations when 
 the initialization lies within the basin of attraction (left panel).
@@ -907,9 +922,9 @@ marginalization step~\eqref{eq:marginalize}. The joint estimate
 requires operations on a $210 \times 210$ matrix (68 landmarks, 
 6 DOF for camera), whereas the marginalized MAP operates on 
 $6 \times 6$ matrices.
-
+ 
 \subsection{Experiment 4: Saddlepoint Correction Accuracy}
-
+ 
 We verify the saddlepoint correction~\eqref{eq:saddlebody}
 against numerical quadrature for a single-landmark
 marginalization. A landmark at depth $x_3' = 10$ is observed
@@ -917,7 +932,7 @@ by a camera at the origin with measurement noise
 $\sigma_z = 0.01$ (corresponding to $\pm 5$~pixels at 
 $512$-pixel resolution). The prior uncertainty $\sigma_x$
 is swept to explore the validity regime.
-
+ 
 For the primary test case ($\sigma_x = 1$, giving
 $\sigma_{\rm depth}/x_3' = 0.10$), the results are:
 \begin{center}
@@ -933,7 +948,7 @@ The saddlepoint correction $c_1 = 9.5 \times 10^{-3}$
 improves the integral estimate by a factor of $\sim\! 3000$
 over Laplace, achieving 6 significant figures of agreement
 with the numerical truth.
-
+ 
 Table~\ref{tab:spregime} shows the correction magnitude
 and validity across the prior strength sweep.
 \begin{table}[t]
@@ -952,7 +967,7 @@ $\sigma_x$ & $\sigma_{\rm depth}/x_3'$ & $c_1$ & Regime \\
 5.0  & 0.50   & $2.5\times10^{-1}$ & expansion breaking down
 \end{tabular}
 \end{table}
-
+ 
 Two features of Table~\ref{tab:spregime} are notable.
 First, $c_1$ scales cleanly as 
 $(\sigma_{\rm depth}/x_3')^2$, confirming the 
@@ -965,16 +980,16 @@ In practice, this corresponds to landmarks observed from
 at least two cameras with a reasonable baseline, or a single
 camera with an informative depth prior---precisely the
 operating regime of most visual SLAM and bundle adjustment systems.
-
+ 
 \subsection{Experiment 5: Pose Estimate Distribution Quality}
-
+ 
 To assess the statistical quality of pose estimates, we impose 
 Gaussian noise ($\sigma = 0.8\%$ of image dimensions, 
 corresponding to $\pm 2$ pixel error for a $512$-pixel image) 
 on the feature point observations and compute the pose estimate 
 distribution. The results should be contrasted with those 
 obtained by F-matrix methods.
-
+ 
 \begin{figure}[t]
     \centering
     \includegraphics[width=4.2cm]{\getname{LMedSqomega}}
@@ -987,7 +1002,7 @@ obtained by F-matrix methods.
     by a second-moment approximation.}
     \label{fig:LMedSq}
 \end{figure}
-
+ 
 \begin{figure}[t]
     \centering
     \includegraphics[width=4.2cm]{\getname{Bayesomega05}}
@@ -1000,7 +1015,7 @@ obtained by F-matrix methods.
     Gaussian, in sharp contrast to the F-matrix result.}
     \label{fig:bayesnoise}
 \end{figure}
-
+ 
 Fig.~\ref{fig:LMedSq} shows the estimator distribution obtained 
 by the LMedS F-matrix method with reweighted least squares 
 refinement. Despite achieving some robustness, significant 
@@ -1009,14 +1024,14 @@ distribution has heavy tails and is not adequately described
 by a second-moment (Gaussian) approximation---precisely the 
 regime where the saddlepoint correction 
 of Section~\ref{sec:saddlepoint} becomes relevant.
-
+ 
 Fig.~\ref{fig:bayesnoise} shows the corresponding distribution 
 from the marginalized MAP algorithm. The pose estimates are 
 tightly concentrated and exhibit the ellipsoidal shape of a 
 Gaussian distribution in exponential coordinates, confirming 
 that the Bayesian framework with proper $SE(3)$ 
 parametrization yields well-behaved estimator statistics.
-
+ 
 The contrast between Figs.~\ref{fig:LMedSq} 
 and~\ref{fig:bayesnoise} demonstrates two points simultaneously:
 (i)~the marginalized MAP estimator produces dramatically better 
@@ -1025,24 +1040,24 @@ same noise conditions, and (ii)~the exponential coordinate
 parametrization yields distributions that are well-approximated 
 by a Gaussian, validating the uncertainty 
 model~\eqref{eq:gaussianSE3}.
-
+ 
 %% ====================================================================
 \section{Conclusion}
 \label{sec:conclusion}
 %% ====================================================================
-
+ 
 We have presented a higher-order probabilistic inference
 framework on $SE(3)$ built on standard Lie-group
 foundations but going beyond the first-order approximations
 used in most current estimation pipelines.
-
+ 
 First, we showed that the choice of pose parametrization is
 not merely notational: Lie-Cartan coordinates of the first kind
 provide the natural centered coordinates for Gaussian
 perturbations on $SE(3)$, whereas second-kind translational
 coordinates inherit systematic bias through the nonlinear
 rotation--translation coupling.
-
+ 
 Second, we derived complete closed-form first- and
 second-order propagation formulas for uncertain compositions
 and transformed points on the full $SE(3)$ group, including
@@ -1051,7 +1066,7 @@ $\mathsf{J}_t(\bfOmega,\mathbf{t})$. Monte Carlo validation
 confirms a substantial improvement over first-order covariance
 transport, with the gain scaling consistently with the predicted
 higher-order error terms.
-
+ 
 Third, we developed a saddlepoint marginalization scheme for
 projective pose-landmark models. Unlike the standard
 Laplace/Schur approximation, the proposed correction captures
@@ -1060,13 +1075,13 @@ retaining a reduced pose-only optimization problem. In the
 perturbative regime, this yields large improvements in marginal
 accuracy over Laplace while preserving computational
 structure compatible with bundle-adjustment pipelines.
-
+ 
 Finally, we gave a closed-form finite Rodrigues/BCH
 composition formula via the $SU(2)$ double cover together
 with explicit treatment of the phase-reflection boundary at
 $\Theta=\pi$, thereby completing the algebraic machinery
 required by the higher-order developments in the paper.
-
+ 
 Taken together, these results position the paper not as another
 introductory account of Lie groups for robotics, but as a
 contribution to higher-order Bayesian inference on $SE(3)$.
@@ -1074,7 +1089,7 @@ The framework is relevant to pose estimation, visual-inertial
 odometry, preintegration, registration, and other applications
 where first-order Gaussian approximations on rigid-body
 motion become a limiting factor.
-
+ 
 Natural next steps include recursive filtering variants of the
 second-order formulas, robustified versions of the marginalized
 objective for outlier-prone data, and integration into large-scale
@@ -2111,75 +2126,75 @@ simplifying both implementation and symbolic verification.
 %% BIBLIOGRAPHY
 %% ====================================================================
 \begin{thebibliography}{99}
-
+ 
 \bibitem{pennec97}
 X.~Pennec and J.-P.~Thirion,
 ``A framework for uncertainty and validation of 3-D registration 
 methods based on points and frames,''
 \emph{Int. J. Computer Vision}, vol.~25, no.~3, pp.~203--229, 1997.
-
+ 
 \bibitem{barrau2017invariant}
 A.~Barrau and S.~Bonnabel,
 ``The invariant extended Kalman filter as a stable observer,''
 \emph{IEEE Trans. Autom. Control}, vol.~62, no.~4, pp.~1797--1812, 2017.
-
+ 
 \bibitem{sola2018micro}
 J.~Sol\`{a}, J.~Deray, and D.~Atchuthan,
 ``A micro Lie theory for state estimation in robotics,''
 \emph{arXiv:1812.01537}, 2018.
-
+ 
 \bibitem{barfoot2024}
 T.~D.~Barfoot,
 \emph{State Estimation for Robotics}, 2nd ed.
 Cambridge University Press, 2024.
-
+ 
 \bibitem{forster2017manifold}
 C.~Forster, L.~Carlone, F.~Dellaert, and D.~Scaramuzza,
 ``On-manifold preintegration for real-time visual-inertial odometry,''
 \emph{IEEE Trans. Robotics}, vol.~33, no.~1, pp.~1--21, 2017.
-
+ 
 \bibitem{chirikjian2012stochastic}
 G.~S.~Chirikjian,
 \emph{Stochastic Models, Information Theory, and Lie Groups, 
 Volume~2: Analytic Methods and Modern Applications}.
 Birkh\"{a}user, 2012.
-
+ 
 \bibitem{ye2024uncertainty}
 J.~Ye and G.~S.~Chirikjian,
 ``Uncertainty propagation and Bayesian fusion on unimodular 
 Lie groups from a parametric perspective,''
 \emph{arXiv:2401.03425}, 2024.
-
+ 
 \bibitem{wang2008nonparametric}
 Y.~Wang and G.~S.~Chirikjian,
 ``Nonparametric second-order theory of error propagation 
 on motion groups,''
 \emph{Int. J. Robotics Research}, vol.~27, no.~11--12, 
 pp.~1258--1273, 2008.
-
+ 
 \bibitem{bourmaud2013discrete}
 G.~Bourmaud, R.~M\'{e}gret, A.~Giremus, and Y.~Berthoumieu,
 ``Discrete extended Kalman filter on Lie groups,''
 \emph{Proc. EUSIPCO}, pp.~1--5, 2013.
-
+ 
 \bibitem{triggs-bundle}
 B.~Triggs, P.~McLauchlan, R.~Hartley, and A.~Fitzgibbon,
 ``Bundle adjustment---a modern synthesis,''
 in \emph{Vision Algorithms: Theory and Practice}, 
 Springer, 2000, pp.~298--375.
-
+ 
 \bibitem{Horn87}
 B.~K.~P.~Horn,
 ``Closed-form solution of absolute orientation using unit 
 quaternions,''
 \emph{J. Opt. Soc. Am. A}, vol.~4, no.~4, pp.~629--642, 1987.
-
+ 
 \bibitem{Wei-Norman}
 J.~Wei and E.~Norman,
 ``On the global representations of the solutions of linear 
 differential equations as a product of exponentials,''
 \emph{Proc. Amer. Math. Soc.}, vol.~15, pp.~327--334, 1964.
-
+ 
 \bibitem{kuehnel2004}
 F.~O.~Kuehnel,
 ``Bayesian estimation of nonlinear parameters on $SE(3)$ 
@@ -2189,19 +2204,19 @@ in Science and Engineering} (MaxEnt 2004),
 R.~Fischer, R.~Preuss, and U.~von Toussaint, Eds.,
 AIP Conf.\ Proc., vol.~735, pp.~176--186, 2004.
 DOI:~10.1063/1.1835212.
-
+ 
 \bibitem{kuehnel2005}
 F.~O.~Kuehnel,
 ``Local frame junction trees in SLAM,''
 \emph{AIP Conf.\ Proc.}, vol.~803, pp.~318--329, 2005.
 DOI:~10.1063/1.2149810.
-
+ 
 \bibitem{kuehnel2008}
 F.~O.~Kuehnel,
 ``Robust Bayesian estimation of nonlinear parameters on 
 $SE(3)$ Lie group from noisy measurements,''
 Tech.\ Rep., NASA Ames / USRA-RIACS, 2008.
-
+ 
 \end{thebibliography}
 
 \end{document}
