@@ -79,7 +79,7 @@ RobustPoseEst/
 │   │   ├── jacobians.rs               # J_ωr, J_ωl, J_t coupling (analytic T-form), 6×6 SE(3) Jacobian
 │   │   ├── projective.rs              # Pinhole camera, derivatives through 3rd order, third cumulants, analytical Q₄
 │   │   ├── saddlepoint.rs             # Landmark optimization, saddlepoint correction (analytical Q₄), validity guard
-│   │   └── propagation.rs             # First/second-order covariance transport, MC validation
+│   │   └── propagation.rs             # First/second-order covariance transport, ε-identity, MC validation
 │   └── examples/
 │       ├── bias_experiment.rs         # Experiment 1: L1 vs L2 coordinate bias (21× ratio)
 │       ├── pose_inference.rs          # Experiment 2: pose estimation with SP-corrected marginal
@@ -118,6 +118,7 @@ See **[rust/README.md](rust/README.md)** for the Rust implementation details, ve
 | Saddlepoint formula | ✅ c₁ = (1/12)A + (1/8)B − (1/8)Q₄, verified against quadrature |
 | Closed-form Q₄ | ✅ Analytical quartic contraction; SP converges in 5 iterations (was 60+) |
 | Pose inference panics | ✅ Fixed NaN/degenerate configurations, added pose prior |
+| Levi-Civita loops | ✅ Replaced with closed-form ε-ε determinant identity (~20× fewer flops in covariance correction) |
 
 ## Notation Correspondence with Solà et al. / Barfoot
 
