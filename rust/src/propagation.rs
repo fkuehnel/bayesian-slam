@@ -19,25 +19,6 @@ use crate::*;
 use crate::jacobians;
 use crate::se3::Pose;
 
-/// Levi-Civita symbol ε_{ijk}.
-#[inline]
-fn levi_civita(i: usize, j: usize, k: usize) -> f64 {
-    if i == j || j == k || i == k { return 0.0; }
-    let perm = [i, j, k];
-    let mut sign = 1i32;
-    let mut p = [perm[0], perm[1], perm[2]];
-    // Bubble sort to count inversions
-    for _ in 0..3 {
-        for m in 0..2 {
-            if p[m] > p[m + 1] {
-                p.swap(m, m + 1);
-                sign = -sign;
-            }
-        }
-    }
-    sign as f64
-}
-
 // =========================================================================
 // First-order propagation
 // =========================================================================
@@ -116,17 +97,14 @@ pub struct SecondOrderResult {
 /// Paper Eq. (meanshift_rotation):
 ///   δμ_i = (1/2) Σ_{αβ} ε_{iαβ} [Σ_gf]_{αβ}
 ///
-/// Returns the 3-vector rotational mean shift.
+/// This is the vee map of the antisymmetric part of Σ_gf, scaled by ½.
 pub fn mean_correction_rotation(sigma_gf_ww: &Mat3) -> Vec3 {
-    let mut delta = [0.0; 3];
-    for i in 0..3 {
-        for a in 0..3 {
-            for b in 0..3 {
-                delta[i] += 0.5 * levi_civita(i, a, b) * sigma_gf_ww[a][b];
-            }
-        }
-    }
-    delta
+    let s = sigma_gf_ww;
+    [
+        0.5 * (s[1][2] - s[2][1]),
+        0.5 * (s[2][0] - s[0][2]),
+        0.5 * (s[0][1] - s[1][0]),
+    ]
 }
 
 /// Second-order covariance correction for the rotational block (3×3).
@@ -134,56 +112,56 @@ pub fn mean_correction_rotation(sigma_gf_ww: &Mat3) -> Vec3 {
 /// Paper Eq. (covcorrection_explicit):
 ///   ΔΣ^{ωω}_{ij} = (1/4) ε_{iαβ} ε_{jγδ} (Σ_aa_{αγ} Σ_bb_{βδ} + Σ_ab_{αδ} Σ_ba_{βγ})
 ///
-/// For Gaussian perturbations, the fourth cumulant vanishes and
-/// only the Isserlis pairings contribute.
+/// Uses the ε-ε identity to avoid 6-nested loops:
+///   ε_{iαβ} ε_{jγδ} X_{αγ} Y_{βδ} = δ_{ij}[trX·trY − tr(XY)]
+///       − trY·X_{ji} − trX·Y_{ji} + (XY)_{ji} + (YX)_{ji}
+///
+/// The cross-covariance term contracts as −F(Σ_ab, Σ_ba) due to the
+/// index swap (αδ,βγ) vs (αγ,βδ), giving ΔΣ = ¼[F(A,B) − F(C,D)].
 pub fn covariance_correction_rotation(
     sigma_aa: &Mat3,
     sigma_bb: &Mat3,
     sigma_ab: &Mat3,
 ) -> Mat3 {
     let sigma_ba = transpose3(sigma_ab);
+    let fab = eps_eps_contract(sigma_aa, sigma_bb);
+    let fcd = eps_eps_contract(sigma_ab, &sigma_ba);
     let mut delta = [[0.0f64; 3]; 3];
-
-    for i in 0..3 {
-        for j in 0..3 {
-            let mut val = 0.0;
-            for a in 0..3 {
-                for b in 0..3 {
-                    let eps_i = levi_civita(i, a, b);
-                    if eps_i == 0.0 { continue; }
-                    for c in 0..3 {
-                        for d in 0..3 {
-                            let eps_j = levi_civita(j, c, d);
-                            if eps_j == 0.0 { continue; }
-                            val += eps_i * eps_j * (
-                                sigma_aa[a][c] * sigma_bb[b][d]
-                                + sigma_ab[a][d] * sigma_ba[b][c]
-                            );
-                        }
-                    }
-                }
-            }
-            delta[i][j] = 0.25 * val;
-        }
-    }
+    for i in 0..3 { for j in 0..3 {
+        delta[i][j] = 0.25 * (fab[i][j] - fcd[i][j]);
+    }}
     delta
 }
 
-/// Second-order covariance correction using the ε-identity shortcut.
+/// ε-ε contraction: F(X,Y)_{ij} = ε_{iαβ} ε_{jγδ} X_{αγ} Y_{βδ}.
 ///
-/// For independent perturbations (Σ_ab = 0), the general formula reduces to:
-///   ΔΣ^{ωω}_{ij} = (1/4) ε_{iαβ} ε_{jγδ} Σ_aa_{αγ} Σ_bb_{βδ}
+/// Expanded via the determinant identity for products of Levi-Civita symbols:
+///   F_{ij} = δ_{ij}[trX·trY − tr(XY)] − trY·X_{ji} − trX·Y_{ji} + (XY)_{ji} + (YX)_{ji}
+fn eps_eps_contract(x: &Mat3, y: &Mat3) -> Mat3 {
+    let tr_x = x[0][0] + x[1][1] + x[2][2];
+    let tr_y = y[0][0] + y[1][1] + y[2][2];
+    let xy = mm3(x, y);
+    let yx = mm3(y, x);
+    let tr_xy = xy[0][0] + xy[1][1] + xy[2][2];
+    let diag = tr_x * tr_y - tr_xy;
+
+    let mut f = [[0.0f64; 3]; 3];
+    for i in 0..3 { for j in 0..3 {
+        f[i][j] = -tr_y * x[j][i] - tr_x * y[j][i] + xy[j][i] + yx[j][i];
+    }}
+    f[0][0] += diag;
+    f[1][1] += diag;
+    f[2][2] += diag;
+    f
+}
+
+/// Second-order covariance correction for independent perturbations (Σ_ab = 0).
 ///
-/// Using ε_{iαβ}ε_{jγδ} = det([[δ_ij,δ_iγ,δ_iδ],[δ_αj,δ_αγ,δ_αδ],[δ_βj,δ_βγ,δ_βδ]]):
-///   = δ_ij (tr A tr B − tr(AB)) − (tr B) A_ij − (tr A) B_ij + (AB)_ij + (BA)_ij
-///   (corrected from earlier version)
+/// Delegates to the general formula with zero cross-covariance.
 pub fn covariance_correction_rotation_independent(
     sigma_aa: &Mat3,
     sigma_bb: &Mat3,
 ) -> Mat3 {
-    // Just delegate to the general formula with zero cross-covariance.
-    // The shortcut identity is tricky to get right; the general formula
-    // is O(3⁴) = 81 operations and already fast enough for 3×3.
     covariance_correction_rotation(sigma_aa, sigma_bb, &Z3)
 }
 
@@ -246,22 +224,16 @@ pub fn second_order(
 
     // Cross block: ΔΣ^{ωt} — Eq. (covcorrection_rottrans)
     // Simplified: (1/2) ε_{iαβ} Σ_aa_{αγ} J_wr_{γk} Σ_bb^{vv}_{βj}
-    let jwr_sig_bb_vv = mm3(&jwr, &sig_bb_vv);
+    //
+    // Let P = Σ_aa · (J_ωr · Σ_bb^{vv}). Then delta_cross_{ij} = ½ ε_{iab} P_{aj}.
+    // For each i, ε_{iab} has exactly two nonzero values:
+    //   i=0: P_{1j} − P_{2j},  i=1: P_{2j} − P_{0j},  i=2: P_{0j} − P_{1j}
+    let p = mm3(&sig_aa_ww, &mm3(&jwr, &sig_bb_vv));
     let mut delta_cross = [[0.0f64; 3]; 3];
-    for i in 0..3 {
-        for j in 0..3 {
-            let mut val = 0.0;
-            for a in 0..3 {
-                for b in 0..3 {
-                    let eps = levi_civita(i, a, b);
-                    if eps == 0.0 { continue; }
-                    for g in 0..3 {
-                        val += eps * sig_aa_ww[a][g] * jwr_sig_bb_vv[g][j];
-                    }
-                }
-            }
-            delta_cross[i][j] = 0.5 * val;
-        }
+    for j in 0..3 {
+        delta_cross[0][j] = 0.5 * (p[1][j] - p[2][j]);
+        delta_cross[1][j] = 0.5 * (p[2][j] - p[0][j]);
+        delta_cross[2][j] = 0.5 * (p[0][j] - p[1][j]);
     }
 
     // Translational block: ΔΣ^{tt} — Eq. (covcorrection_transtrans)
@@ -458,6 +430,22 @@ fn cholesky6(a: &Mat6) -> Mat6 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Levi-Civita symbol ε_{ijk} (used only for test validation).
+    fn levi_civita(i: usize, j: usize, k: usize) -> f64 {
+        if i == j || j == k || i == k { return 0.0; }
+        let mut p = [i, j, k];
+        let mut sign = 1i32;
+        for _ in 0..3 {
+            for m in 0..2 {
+                if p[m] > p[m + 1] {
+                    p.swap(m, m + 1);
+                    sign = -sign;
+                }
+            }
+        }
+        sign as f64
+    }
 
     fn isotropic6(sigma_rot: f64, sigma_trans: f64) -> Mat6 {
         let sr2 = sigma_rot * sigma_rot;
